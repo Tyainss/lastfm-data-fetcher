@@ -22,13 +22,39 @@ def fetch_user_data():
     data = response.json()
     return data['user']
 
-# Function to fetch track data with duration
-def fetch_track_data_with_duration(fetch_all=False, pages=False):
+# Get the total of pages of 200 tracks each for the user
+def get_total_pages():
+    params = {
+        'method': 'user.getrecenttracks',
+        'user': USERNAME,
+        'api_key': API_KEY,
+        'format': 'json',
+        'limit': 200  # Fetch only one track to get total number of pages
+    }
+    response = requests.get(BASE_URL, params=params)
+    data = response.json()
+    total_pages = int(data['recenttracks']['@attr']['totalPages'])
+    return total_pages
+
+
+def extract_track_data(fetch_all=False, number_pages=1):
+    """
+    Fetches all data from the last page until the most recent one, 
+    depending on number of pages selected.
+    """
     all_tracks = []
-    page = 1
-    total_pages = float('inf')
-    
-    while page <= total_pages:
+    total_pages = get_total_pages()
+    if fetch_all:
+        number_pages = total_pages
+
+    page = total_pages
+    page_goal = (total_pages - number_pages) + 1
+
+    with open('config.json') as f:
+        config_data = json.load(f)
+        latest_track_date = config_data.get('latest_track_date')
+
+    while page >= page_goal:
         params = {
             'method': 'user.getrecenttracks',
             'user': USERNAME,
@@ -40,19 +66,21 @@ def fetch_track_data_with_duration(fetch_all=False, pages=False):
         response = requests.get(BASE_URL, params=params)
         data = response.json()
         
-        # Update total pages based on the total scrobbles count
-        if not fetch_all:
-            total_pages = 1
-        elif pages:
-            total_pages = pages
-        elif page == 1:
-            total_pages = int(data['recenttracks']['@attr']['totalPages'])
+        if 'error' in data:
+            print("Error:", data['message'])
+            break
         
         print('Page ', page,' out of ', total_pages)
         
         # Extract relevant track information
         tracks = data['recenttracks'].get('track', [])
+
         for track in tracks:
+            # Check if track is more recent than the latest_track_date
+            track_date = track.get('date', {}).get('#text', '')
+            if latest_track_date and track_date >= latest_track_date:
+                continue  # Skip if track date is not more recent than latest_track_date
+
             artist_name = track['artist']['#text']
             album_name = track['album']['#text']
             track_name = track['name']
@@ -79,9 +107,17 @@ def fetch_track_data_with_duration(fetch_all=False, pages=False):
             }
             
             all_tracks.append(track_info)
-        
-        page += 1
-        
+
+        page -= 1
+
+    most_recent_date_track = tracks[0].get('date', '')
+    if not latest_track_date or most_recent_date_track >= latest_track_date:
+        config['latest_track_date'] = most_recent_date_track
+
+        # Update json file with the most recent date
+        with open('new_config.json', 'w') as f: # Replace by 'config.json' after
+            json.dump(data, f, indent=4)
+
     return all_tracks
 
 # Function to fetch album info for a track
@@ -151,7 +187,7 @@ def get_image_text(image_list, size):
     return None
 
 # Fetch track data with duration
-track_data = fetch_track_data_with_duration(fetch_all=True, pages=5)
+track_data = extract_track_data(fetch_all=False, number_pages=5)
 
 # Create DataFrame
 track_df = pd.DataFrame(track_data)
