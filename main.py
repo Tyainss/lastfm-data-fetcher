@@ -1,14 +1,17 @@
 import pandas as pd
 import requests
 import json
+import os
 
 # Load credentials from JSON file
-with open('config.json') as f:
+# with open('config.json') as f:
+with open('new_config.json') as f:
     config = json.load(f)
 
 API_KEY = config['API_KEY']
 USERNAME = config['USERNAME']
 BASE_URL = 'http://ws.audioscrobbler.com/2.0/'
+PATH_EXTRACT = config['path_extracted_file'].replace('{username}', USERNAME)
 
 # Function to fetch user data
 def fetch_user_data():
@@ -60,7 +63,9 @@ def extract_track_data(fetch_all=False, number_pages=1):
             'user': USERNAME,
             'api_key': API_KEY,
             'format': 'json',
+            # 'from': 
             'page': page,
+            'extended': 0,
             'limit': 200  # Maximum size by page
         }
         response = requests.get(BASE_URL, params=params)
@@ -74,13 +79,27 @@ def extract_track_data(fetch_all=False, number_pages=1):
         
         # Extract relevant track information
         tracks = data['recenttracks'].get('track', [])
-
+        
+        # Exclude "now playing" track if present
+        if '@attr' in tracks[0] and tracks[0]['@attr'].get('nowplaying') == 'true':
+            tracks = tracks[1:]
+        
+        page_most_recent_track = tracks[0].get('date', {}).get('#text', '')
+        # Skip page if it has already been extracted
+        if latest_track_date and page_most_recent_track >= latest_track_date:
+            page -= 1
+            page_goal -= 1
+            continue
+            
         for track in tracks:
             # Check if track is more recent than the latest_track_date
             track_date = track.get('date', {}).get('#text', '')
             if latest_track_date and track_date >= latest_track_date:
                 continue  # Skip if track date is not more recent than latest_track_date
-
+            
+            if '@attr' in track and track['@attr'].get('nowplaying') == 'true':
+                continue  # Skip "now playing" tracks
+                
             artist_name = track['artist']['#text']
             album_name = track['album']['#text']
             track_name = track['name']
@@ -93,7 +112,7 @@ def extract_track_data(fetch_all=False, number_pages=1):
             track_info = {
                 'track_name': track_name,
                 'track_mbid': track_mbid,
-                'date': track.get('date', ''),
+                'date': track_date,
                 'duration_seconds': album_data.get('duration', 0),
                 'artist_name': artist_name,
                 'artist_mbid': track['artist'].get('mbid', ''),
@@ -110,13 +129,14 @@ def extract_track_data(fetch_all=False, number_pages=1):
 
         page -= 1
 
-    most_recent_date_track = tracks[0].get('date', '')
+    most_recent_date_track = page_most_recent_track
+    print('most_recent_track :',most_recent_date_track)
     if not latest_track_date or most_recent_date_track >= latest_track_date:
         config['latest_track_date'] = most_recent_date_track
 
         # Update json file with the most recent date
         with open('new_config.json', 'w') as f: # Replace by 'config.json' after
-            json.dump(data, f, indent=4)
+            json.dump(config, f, indent=4)
 
     return all_tracks
 
@@ -187,11 +207,16 @@ def get_image_text(image_list, size):
     return None
 
 # Fetch track data with duration
-track_data = extract_track_data(fetch_all=False, number_pages=5)
+track_data = extract_track_data(fetch_all=False, number_pages=1)
 
 # Create DataFrame
 track_df = pd.DataFrame(track_data)
 
+# If CSV doesn't exist, create new CSV. Else append to existing CSV
+if not os.path.exists(PATH_EXTRACT):
+    track_df.to_csv(PATH_EXTRACT, index=False)
+else:
+    track_df.to_csv(PATH_EXTRACT, mode='a', index=False, header=False)
 
 """ List of things to improve:
     - Artist image is blank - Try to get it from MusicBrainz
