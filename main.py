@@ -3,6 +3,8 @@ import requests
 import json
 import os
 from datetime import datetime
+import time
+import pycountry
 
 # Load credentials from JSON file
 with open('config.json') as f:
@@ -15,11 +17,27 @@ BASE_URL = 'http://ws.audioscrobbler.com/2.0/'
 PATH_EXTRACT = config['path_extracted_file'].replace('{username}', USERNAME)
 LATEST_TRACK_DATE = config['latest_track_date']
 
+MB_PATH_ARTIST_INFO = config['path_musicbrainz_artist_info']
+MB_CLIENT_ID = 'E8eQl4SWJo2IHcwlIx7swmH8OMN7cgwh'
+MB_CLIENT_SECRET = 'xydRuHhyg36PgMH5_P46E2qVQba1s1b7'
+
+
 if LATEST_TRACK_DATE:
     date_obj = datetime.strptime(LATEST_TRACK_DATE, '%d %b %Y, %H:%M')
     UNIX_LATEST_TRACK_DATE = str(int(date_obj.timestamp()))
 else:
     UNIX_LATEST_TRACK_DATE = None
+
+def get_country_name_from_iso_code(iso_code):
+    try:
+        country = pycountry.countries.get(alpha_2=iso_code.upper())
+        if country:
+            return country.name
+        else:
+            return 'Unknown'
+    except Exception as e:
+        print(f'Error: {e}')
+        return 'Unknown'
 
 # Function to fetch user data
 def fetch_user_data():
@@ -212,6 +230,74 @@ def get_track_duration(album_info):
                     return 0
     return 0
 
+# Not working yet :/
+def get_access_token_musicbrainz(client_id, client_secret):
+    token_url = 'https://musicbrainz.org/oauth2/token'
+    data = {
+        'grant_type': 'client_credentials',
+        'client_id': client_id,
+        'client_secret': client_secret
+    }
+    response = requests.post(token_url, data=data)
+    token_data = response.json()
+    access_token = token_data.get('access_token')
+    return access_token
+
+def fetch_artist_info_from_musicbrainz(artist_mbid_list):
+    """
+    Needs 1 second sleep between every call to not reach API limit
+    """
+    all_artists = []
+    for artist_mbid in artist_mbid_list:
+        # Sleep 1 second to prevent breaking API limit call per second
+        time.sleep(1)
+        # MusicBrainz API endpoint for fetching artist information
+        url = f'https://musicbrainz.org/ws/2/artist/{artist_mbid}?inc=aliases+tags+ratings+works&fmt=json'
+        # headers = {
+        #     'Authorization': f'Bearer {access_token}'
+        # }
+        # response = requests.get(url, headers=headers)
+        response = requests.get(url)
+        data = response.json()
+    
+        tags = data['tags']
+        if tags:
+            tags.sort(reverse=True, key=lambda x: x['count'])
+            main_genre = tags[0].get('name')
+        else:
+            main_genre = None
+        
+        country_1 = data['country']
+        country_2 = data.get('area', {}).get('iso-3166-1-codes', [''])[0]
+        country_name = get_country_name_from_iso_code(country_2 if country_2 else country_1)
+        
+        career_begin = data.get('life-span', {}).get('begin')
+        career_end = data.get('life-span', {}).get('end')
+        career_ended = data.get('life-span', {}).get('ended')
+        artist_type = data['type']
+        
+        # Data treatment on dates to have them in yyyy-MM-DD format
+        if career_begin:
+            career_begin = pd.to_datetime(career_begin).strftime('%Y-%m-%d')
+        if career_end:
+            career_end = pd.to_datetime(career_end).strftime('%Y-%m-%d')
+        
+        artist_info = {
+            'artist_mbid': artist_mbid
+            , 'artist_country': country_name
+            , 'artist_type': artist_type
+            , 'artist_main_genre': main_genre
+            , 'artist_career_begin': career_begin
+            , 'artist_career_end': career_end
+            , 'artist_career_ended': career_ended
+        }
+        
+        all_artists.append(artist_info)
+    
+    return all_artists
+
+
+
 # Function to extract '#text' value from 'image' column based on 'size'
 def get_image_text(image_list, size):
     for image in image_list:
@@ -227,23 +313,69 @@ def output_csv(df, path, new=False):
     else:
         print('Adding to existing CSV')
         df.to_csv(path, mode='a', index=False, header=False)
-  
+
 
 NEW_CSV = False
+NEW_MB_CSV = False
 
 # Fetch track data with duration
 track_data = extract_track_data(number_pages=2)
 
-# Create DataFrame
+# Create DataFrame with lastfm data
 track_df = pd.DataFrame(track_data)
 
+
+"""
+Let's do some treatment on the artist_mbid. In some rows, for artist that already
+have an artist_mbid, the mbid shows as NaN. Also, since I'm not sure that 
+an artist cant have more than 1 artist_mbid, lets map the artist to the mbid
+that appears the most to him to replace the NaN values
+"""
+def fill_missing_artist_mbid(row):
+    if pd.isna(row['artist_mbid']):
+        return artist_mbid_mapping.get(row['artist_name'])
+    else:
+        return row['artist_mbid']
+    
+artist_mbid_counts = track_df.groupby(['artist_name', 'artist_mbid']).size().reset_index(name='count')
+artist_mbid_mapping = artist_mbid_counts.sort_values(by='count', ascending=False).drop_duplicates(subset='artist_name').set_index('artist_name')['artist_mbid']
+
+track_df['artist_mbid'] = track_df.apply(fill_missing_artist_mbid, axis=1)
+
+
+
+list_artist_mbid = list(set(track_df[track_df['artist_mbid'].notna()]['artist_mbid']))
+# If MusicBrainz artist file exists, check if we already extracted artists info
+# else, fetch data from all artists
+if os.path.exists(MB_PATH_ARTIST_INFO) and not NEW_MB_CSV:
+    df_mb_artist_info = pd.read_csv(MB_PATH_ARTIST_INFO)
+    mbids_already_extracted = list(set(df_mb_artist_info[df_mb_artist_info['artist_mbid'].notna()]['artist_mbid']))
+    
+    artists_to_extract = [mbid for mbid in list_artist_mbid if (mbid and mbid not in mbids_already_extracted)]
+else:
+    NEW_MB_CSV = True
+    artists_to_extract = [mbid for mbid in list_artist_mbid if mbid]
+    
+mb_artist_data = fetch_artist_info_from_musicbrainz(artists_to_extract)
+
+mb_artist_df = pd.DataFrame(mb_artist_data)
+
+# Output the CSV with artist info from Music Brainz
+output_csv(df=mb_artist_df, path=MB_PATH_ARTIST_INFO, new=NEW_MB_CSV)
+
+# Update the Lastfm data with the MB artist data
+merged_df = track_df.merge(mb_artist_df, how='left', on='artist_mbid')
+
+
 # Output the CSV
-output_csv(df=track_df, path=PATH_EXTRACT, new=(NEW_CSV or not LATEST_TRACK_DATE))
+output_csv(df=merged_df, path=PATH_EXTRACT, new=(NEW_CSV or not LATEST_TRACK_DATE))
 
 
 """ List of things to improve:
     - Artist image is blank - Try to get it from MusicBrainz
     - Try to get more artist information from MusicBrainz - Country etc
+        - Might have to do some data treatment on the 'artist_mbid' column because in some tracks the artist has mbid and in 
+        others he does not. Check if they contain more than 1. Perhaps choose the mbid with more recurrence
     - Find a more optimized/fast way of extracting the data, specially with track duration
         - Maybe paralelism?
 Chat GPT:
