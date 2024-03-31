@@ -23,8 +23,8 @@ MB_CLIENT_SECRET = 'xydRuHhyg36PgMH5_P46E2qVQba1s1b7'
 
 
 if LATEST_TRACK_DATE:
-    date_obj = datetime.strptime(LATEST_TRACK_DATE, '%d %b %Y, %H:%M')
-    UNIX_LATEST_TRACK_DATE = str(int(date_obj.timestamp()))
+    LATEST_TRACK_DATE_obj = datetime.strptime(LATEST_TRACK_DATE, '%d %b %Y, %H:%M')
+    UNIX_LATEST_TRACK_DATE = str(int(LATEST_TRACK_DATE_obj.timestamp()))
 else:
     UNIX_LATEST_TRACK_DATE = None
 
@@ -171,14 +171,16 @@ def extract_track_data(from_date=UNIX_LATEST_TRACK_DATE
         page -= 1
 
     most_recent_date_track = page_most_recent_track
-    print('most_recent_track :',most_recent_date_track)
+    most_recent_date_track_obj = page_most_recent_track_obj
+    print('most_recent_track :', most_recent_date_track_obj)
     if update_config:
-        if not LATEST_TRACK_DATE or most_recent_date_track >= LATEST_TRACK_DATE:
+        if not LATEST_TRACK_DATE or most_recent_date_track_obj >= LATEST_TRACK_DATE_obj:
             config['latest_track_date'] = most_recent_date_track
     
             # Update json file with the most recent date
             # with open('new_config.json', 'w') as f: # Replace by 'config.json' after
             with open('config.json', 'w') as f:
+                print('Updated latest extracted date in config')
                 json.dump(config, f, indent=4)
 
     return all_tracks
@@ -259,6 +261,7 @@ def fetch_artist_info_from_musicbrainz(artist_mbid_list):
     """
     Needs 1 second sleep between every call to not reach API limit
     """
+    print('Fetching artist info from MusicBrainz')
     all_artists = []
     for artist_mbid in artist_mbid_list:
         # Sleep 1 second to prevent breaking API limit call per second
@@ -331,7 +334,7 @@ NEW_CSV = False
 NEW_MB_CSV = False
 
 # Fetch track data with duration
-track_data = extract_track_data(number_pages=10)
+track_data = extract_track_data(number_pages=2)
 
 # Create DataFrame with lastfm data
 track_df = pd.DataFrame(track_data)
