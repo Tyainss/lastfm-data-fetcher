@@ -35,6 +35,9 @@ def get_country_name_from_iso_code(iso_code):
             return country.name
         else:
             return 'Unknown'
+    # 'NoneType' errors are common for artist without Country info
+    except AttributeError:
+        return 'Unknown'
     except Exception as e:
         print(f'Error: {e}')
         return 'Unknown'
@@ -79,6 +82,12 @@ def extract_track_data(from_date=UNIX_LATEST_TRACK_DATE
     all_tracks = []
     total_pages = get_total_pages(from_date=from_date, to_date=to_date)
     
+    if from_date:
+        from_date_obj = datetime.utcfromtimestamp(int(from_date))
+        print('From date :', from_date_obj.strftime('%d %b %Y, %H:%M'))
+    else:
+        from_date_obj = None
+    
     # Define page interval
     page = total_pages
     if not number_pages:
@@ -104,7 +113,7 @@ def extract_track_data(from_date=UNIX_LATEST_TRACK_DATE
             print("Error:", data['message'])
             break
         
-        print('Page ', page,' out of ', total_pages)
+        print('Page ', page,' up until ', page_goal)
         
         # Extract relevant track information
         tracks = data['recenttracks'].get('track', [])
@@ -114,8 +123,10 @@ def extract_track_data(from_date=UNIX_LATEST_TRACK_DATE
             tracks = tracks[1:]
         
         page_most_recent_track = tracks[0].get('date', {}).get('#text', '')
+        page_most_recent_track_obj = datetime.strptime(page_most_recent_track, '%d %b %Y, %H:%M')
         # Skip page if it has already been extracted
-        if from_date and from_date >= page_most_recent_track:
+        if from_date_obj and from_date_obj >= page_most_recent_track_obj:
+            print('Skipping track. Page most recent as of date :', page_most_recent_track)
             page -= 1
             page_goal = max(page_goal - 1, 1)
             continue
@@ -123,7 +134,8 @@ def extract_track_data(from_date=UNIX_LATEST_TRACK_DATE
         for track in tracks:
             # Check if track is more recent than the latest_track_date
             track_date = track.get('date', {}).get('#text', '')
-            if from_date and from_date >= track_date:
+            track_date_obj = datetime.strptime(track_date, '%d %b %Y, %H:%M')
+            if from_date_obj and from_date_obj >= track_date_obj:
                 continue  # Skip if track date is not more recent than latest_track_date
             
             if '@attr' in track and track['@attr'].get('nowplaying') == 'true':
@@ -319,7 +331,7 @@ NEW_CSV = False
 NEW_MB_CSV = False
 
 # Fetch track data with duration
-track_data = extract_track_data(number_pages=2)
+track_data = extract_track_data(number_pages=10)
 
 # Create DataFrame with lastfm data
 track_df = pd.DataFrame(track_data)
