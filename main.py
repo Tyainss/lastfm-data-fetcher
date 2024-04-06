@@ -25,6 +25,8 @@ MB_PATH_ARTIST_INFO = config['path_musicbrainz_artist_info']
 MB_CLIENT_ID = 'E8eQl4SWJo2IHcwlIx7swmH8OMN7cgwh'
 MB_CLIENT_SECRET = 'xydRuHhyg36PgMH5_P46E2qVQba1s1b7'
 
+TRACK_DATA_SCHEMA = schema['Scrobble Data']
+MB_ARTIST_SCHEMA = schema['MusicBrainz Data']
 
 if LATEST_TRACK_DATE:
     LATEST_TRACK_DATE_obj = datetime.strptime(LATEST_TRACK_DATE, '%d %b %Y, %H:%M')
@@ -273,11 +275,10 @@ def fetch_artist_info_from_musicbrainz(artist_mbid_list):
     print('Fetching artist info from MusicBrainz')
     all_artists = []
     for artist_mbid in artist_mbid_list:
-        print(artist_mbid)
         # Sleep 1 second to prevent breaking API limit call per second
         time.sleep(1)
         # MusicBrainz API endpoint for fetching artist information
-        url = f'https://musicbrainz.org/ws/2/artist/{artist_mbid}?inc=aliases+tags+ratings+works&fmt=json'
+        url = f'https://musicbrainz.org/ws/2/artist/{artist_mbid}?inc=aliases+tags+ratings+works+url-rels&fmt=json'
         # headers = {
         #     'Authorization': f'Bearer {access_token}'
         # }
@@ -301,6 +302,13 @@ def fetch_artist_info_from_musicbrainz(artist_mbid_list):
         career_ended = data.get('life-span', {}).get('ended')
         artist_type = data['type']
         
+        # # Extracting artist image URL
+        # artist_image_url = None
+        # for relation in data.get('relations', []):
+        #     if relation['type'] == 'image' and relation['url']['resource']:
+        #         artist_image_url = relation['url']['resource']
+        #         break
+        
         # Data treatment on dates to have them in yyyy-MM-DD format
         if career_begin:
             career_begin = pd.to_datetime(career_begin).strftime('%Y-%m-%d')
@@ -315,6 +323,7 @@ def fetch_artist_info_from_musicbrainz(artist_mbid_list):
             , 'artist_career_begin': career_begin
             , 'artist_career_end': career_end
             , 'artist_career_ended': career_ended
+            # , 'artist_image_url': artist_image_url  # Added artist image URL
         }
         
         all_artists.append(artist_info)
@@ -342,17 +351,23 @@ def output_excel(df, path, schema=None):
     if schema:
         # Convert DataFrame columns to the specified data types
         for column, dtype in schema.items():
+            print('Column :', column, 'dtype :', dtype)
             df[column] = df[column].astype(dtype)
     
     df.to_excel(path, index=False)
 
+def convert_to_bool(x):
+    if pd.isna(x):
+        return pd.NA # Use pandas' NA for missing values in boolean columns
+    return bool(x)
+    
 
 def reset_config():
     config['latest_track_date'] = ""
     config['scrobble_number'] = 0
 
-NEW_CSV = True
-NEW_MB_CSV = True
+NEW_CSV = False
+NEW_MB_CSV = False
 
 # Reset the config tracker parameters if we decide to create a new CSV
 if NEW_CSV:
@@ -364,10 +379,10 @@ if NEW_CSV:
     
         
 # Fetch track data with duration
-track_data = extract_track_data(number_pages=2)
+lastfm_data = extract_track_data(number_pages=15)
 
 # Create DataFrame with lastfm data
-track_df = pd.DataFrame(track_data)
+df_lastfm = pd.DataFrame(lastfm_data)
 
 """
 Let's do some treatment on the artist_mbid. In some rows, for artist that already
@@ -376,30 +391,35 @@ an artist cant have more than 1 artist_mbid, lets map the artist to the mbid
 that appears the most to him to replace the NaN values
 """
 def fill_missing_artist_mbid(row):
-    if pd.isna(row['artist_mbid']):
+    if pd.isna(row['artist_mbid']) or row['artist_mbid'] == '':
         return artist_mbid_mapping.get(row['artist_name'])
     else:
         return row['artist_mbid']
     
 # Append already extracted data since some artists might still have a 'null' artist_mbid
+df_existing_lastfm_data = pd.DataFrame(columns = TRACK_DATA_SCHEMA.keys())
 if os.path.exists(PATH_EXTRACT) and not NEW_CSV:
-    df_existing_data = pd.read_csv(PATH_EXTRACT)
-    # Append new data to bottom of existing csv
-    track_df = pd.concat([df_existing_data, track_df], ignore_index=True)
+    df_existing_lastfm_data = pd.read_excel(PATH_EXTRACT)
+
+# Append new data to bottom of existing csv
+temp_df = pd.concat([df_existing_lastfm_data, df_lastfm], ignore_index=True)
     
-artist_mbid_counts = track_df.groupby(['artist_name', 'artist_mbid']).size().reset_index(name='count')
+artist_mbid_counts = temp_df.groupby(['artist_name', 'artist_mbid']).size().reset_index(name='count')
 artist_mbid_mapping = artist_mbid_counts.sort_values(by='count', ascending=False).drop_duplicates(subset='artist_name').set_index('artist_name')['artist_mbid']
 
-track_df['artist_mbid'] = track_df.apply(fill_missing_artist_mbid, axis=1)
+# Fix artist_mbid in both new data and existing data
+for df in [df_lastfm, df_existing_lastfm_data]:
+    df['artist_mbid'] = df.apply(fill_missing_artist_mbid, axis=1)
+# df_existing_lastfm_data['artist_mbid'] = df_lastfm.apply(fill_missing_artist_mbid, axis=1)
 
 
-
-list_artist_mbid = list(set(track_df[track_df['artist_mbid'].notna()]['artist_mbid']))
+list_artist_mbid = list(set(df_lastfm[df_lastfm['artist_mbid'].notna()]['artist_mbid']))
 # If MusicBrainz artist file exists, check if we already extracted artists info
 # else, fetch data from all artists
+df_existing_mb_artist_info = pd.DataFrame()
 if os.path.exists(MB_PATH_ARTIST_INFO) and not NEW_MB_CSV:
-    df_mb_artist_info = pd.read_csv(MB_PATH_ARTIST_INFO)
-    mbids_already_extracted = list(set(df_mb_artist_info[df_mb_artist_info['artist_mbid'].notna()]['artist_mbid']))
+    df_existing_mb_artist_info = pd.read_csv(MB_PATH_ARTIST_INFO)
+    mbids_already_extracted = list(set(df_existing_mb_artist_info[df_existing_mb_artist_info['artist_mbid'].notna()]['artist_mbid']))
     
     artists_to_extract = [mbid for mbid in list_artist_mbid if (mbid and mbid not in mbids_already_extracted)]
 else:
@@ -408,27 +428,33 @@ else:
     
 mb_artist_data = fetch_artist_info_from_musicbrainz(artists_to_extract)
 
-mb_artist_df = pd.DataFrame(mb_artist_data)
+df_mb_artist = pd.DataFrame(mb_artist_data)
+# Concating new artist info with the existing artist info
+df_mb_artist = pd.concat([df_mb_artist, df_existing_mb_artist_info])
 
 # Output the CSV with artist info from Music Brainz
-output_csv(df=mb_artist_df, path=MB_PATH_ARTIST_INFO, append=(not NEW_MB_CSV))
+# output_csv(df=df_mb_artist, path=MB_PATH_ARTIST_INFO, append=(not NEW_MB_CSV))
+output_excel(df=df_mb_artist, path=MB_PATH_ARTIST_INFO, schema=MB_ARTIST_SCHEMA)
+
 
 # Update the Lastfm data with the MB artist data
-merged_df = track_df.merge(mb_artist_df, how='left', on='artist_mbid')
+# df_merged = df_lastfm.merge(df_mb_artist, how='left', on='artist_mbid')
 
+
+# Merge new data into existing data (whose artist_mbid has been corrected)
+df_output = pd.concat([df_existing_lastfm_data, df_lastfm])
 
 # Output the CSV with track data
-track_data_schema = schema['Scrobble Data']
-output_excel(df=merged_df, path=PATH_EXTRACT, schema=track_data_schema)
-# output_csv(df=merged_df, path=PATH_EXTRACT)
-# merged_df.to_csv(PATH_EXTRACT, index=False)
+output_excel(df=df_output, path=PATH_EXTRACT, schema=TRACK_DATA_SCHEMA)
+# output_csv(df=df_merged, path=PATH_EXTRACT)
+# df_merged.to_csv(PATH_EXTRACT, index=False)
 
 
 """ List of things to improve:
     - Add validations - Scrobble_number vs # of rows in CSV
-    - Add data type schema for the output CSV ('Date' as datetime, etc)
     - Format the code better to prevent a long piece of code - with classes | After finishing the code / not requiring high amounts of testing
-    - Artist image is blank - Try to get it from MusicBrainz
+    - Artist image is blank - Try to get it from MusicBrainz | Tableau seems to not be able to read all images correctly, even after getting them from Wikidata API
+        - Not worth the effort for now
     - Find a more optimized/fast way of extracting the data, specially with track duration
         - Maybe paralelism?
 Chat GPT:
