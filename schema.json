@@ -1,12 +1,9 @@
 {
     "Scrobble Data": {
+        "scrobble_number": "int",
         "track_name": "str",
-        "track_artist": "str",
-        "track_album": "str",
-        "track_listeners": "int",
-        "track_playcount": "int",
         "track_mbid": "str",
-        "date": "datetime64[ns, '%d %b %Y, %H:%M']",
+        "date": "datetime64",
         "duration_seconds": "int",
         "artist_name": "str",
         "artist_mbid": "str",
