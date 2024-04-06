@@ -11,11 +11,15 @@ with open('config.json') as f:
 # with open('new_config.json') as f:
     config = json.load(f)
 
+with open('schema.json') as f:
+    schema = json.load(f)
+
 API_KEY = config['API_KEY']
 USERNAME = config['USERNAME']
 BASE_URL = 'http://ws.audioscrobbler.com/2.0/'
 PATH_EXTRACT = config['path_extracted_file'].replace('{username}', USERNAME)
 LATEST_TRACK_DATE = config['latest_track_date']
+SCROBBLE_NUMBER = config['scrobble_number']
 
 MB_PATH_ARTIST_INFO = config['path_musicbrainz_artist_info']
 MB_CLIENT_ID = 'E8eQl4SWJo2IHcwlIx7swmH8OMN7cgwh'
@@ -81,6 +85,7 @@ def extract_track_data(from_date=UNIX_LATEST_TRACK_DATE
     """
     all_tracks = []
     total_pages = get_total_pages(from_date=from_date, to_date=to_date)
+    track_number = SCROBBLE_NUMBER
     
     if from_date:
         from_date_obj = datetime.utcfromtimestamp(int(from_date))
@@ -149,8 +154,11 @@ def extract_track_data(from_date=UNIX_LATEST_TRACK_DATE
             # Fetch album info to get track duration
             album_data = fetch_album_info(artist_name, album_name)
             artist_data = fetch_artist_info(artist_name)
-        
+            
+            track_number += 1
+            
             track_info = {
+                'scrobble_number': track_number,
                 'track_name': track_name,
                 'track_mbid': track_mbid,
                 'date': track_date,
@@ -176,6 +184,7 @@ def extract_track_data(from_date=UNIX_LATEST_TRACK_DATE
     if update_config:
         if not LATEST_TRACK_DATE or most_recent_date_track_obj >= LATEST_TRACK_DATE_obj:
             config['latest_track_date'] = most_recent_date_track
+            config['scrobble_number'] = track_number
     
             # Update json file with the most recent date
             # with open('new_config.json', 'w') as f: # Replace by 'config.json' after
@@ -264,6 +273,7 @@ def fetch_artist_info_from_musicbrainz(artist_mbid_list):
     print('Fetching artist info from MusicBrainz')
     all_artists = []
     for artist_mbid in artist_mbid_list:
+        print(artist_mbid)
         # Sleep 1 second to prevent breaking API limit call per second
         time.sleep(1)
         # MusicBrainz API endpoint for fetching artist information
@@ -320,25 +330,44 @@ def get_image_text(image_list, size):
             return image['#text']
     return None
 
-def output_csv(df, path, new=False):
-    # If CSV doesn't exist or we want a new CSV, create new CSV. Else append to existing CSV
-    if not os.path.exists(path) or new:
-        print('New CSV')
-        df.to_csv(path, index=False)
-    else:
+def output_csv(df, path, append=False):
+    if append:
         print('Adding to existing CSV')
         df.to_csv(path, mode='a', index=False, header=False)
+    else:
+        print('New CSV')
+        df.to_csv(path, index=False)
+
+def output_excel(df, path, schema=None):
+    if schema:
+        # Convert DataFrame columns to the specified data types
+        for column, dtype in schema.items():
+            df[column] = df[column].astype(dtype)
+    
+    df.to_excel(path, index=False)
 
 
-NEW_CSV = False
-NEW_MB_CSV = False
+def reset_config():
+    config['latest_track_date'] = ""
+    config['scrobble_number'] = 0
 
+NEW_CSV = True
+NEW_MB_CSV = True
+
+# Reset the config tracker parameters if we decide to create a new CSV
+if NEW_CSV:
+    reset_config()
+    
+    with open('config.json', 'w') as f:
+        print('Resetting config')
+        json.dump(config, f, indent=4)
+    
+        
 # Fetch track data with duration
 track_data = extract_track_data(number_pages=2)
 
 # Create DataFrame with lastfm data
 track_df = pd.DataFrame(track_data)
-
 
 """
 Let's do some treatment on the artist_mbid. In some rows, for artist that already
@@ -351,6 +380,12 @@ def fill_missing_artist_mbid(row):
         return artist_mbid_mapping.get(row['artist_name'])
     else:
         return row['artist_mbid']
+    
+# Append already extracted data since some artists might still have a 'null' artist_mbid
+if os.path.exists(PATH_EXTRACT) and not NEW_CSV:
+    df_existing_data = pd.read_csv(PATH_EXTRACT)
+    # Append new data to bottom of existing csv
+    track_df = pd.concat([df_existing_data, track_df], ignore_index=True)
     
 artist_mbid_counts = track_df.groupby(['artist_name', 'artist_mbid']).size().reset_index(name='count')
 artist_mbid_mapping = artist_mbid_counts.sort_values(by='count', ascending=False).drop_duplicates(subset='artist_name').set_index('artist_name')['artist_mbid']
@@ -376,21 +411,24 @@ mb_artist_data = fetch_artist_info_from_musicbrainz(artists_to_extract)
 mb_artist_df = pd.DataFrame(mb_artist_data)
 
 # Output the CSV with artist info from Music Brainz
-output_csv(df=mb_artist_df, path=MB_PATH_ARTIST_INFO, new=NEW_MB_CSV)
+output_csv(df=mb_artist_df, path=MB_PATH_ARTIST_INFO, append=(not NEW_MB_CSV))
 
 # Update the Lastfm data with the MB artist data
 merged_df = track_df.merge(mb_artist_df, how='left', on='artist_mbid')
 
 
-# Output the CSV
-output_csv(df=merged_df, path=PATH_EXTRACT, new=(NEW_CSV or not LATEST_TRACK_DATE))
+# Output the CSV with track data
+track_data_schema = schema['Scrobble Data']
+output_excel(df=merged_df, path=PATH_EXTRACT, schema=track_data_schema)
+# output_csv(df=merged_df, path=PATH_EXTRACT)
+# merged_df.to_csv(PATH_EXTRACT, index=False)
 
 
 """ List of things to improve:
+    - Add validations - Scrobble_number vs # of rows in CSV
+    - Add data type schema for the output CSV ('Date' as datetime, etc)
+    - Format the code better to prevent a long piece of code - with classes | After finishing the code / not requiring high amounts of testing
     - Artist image is blank - Try to get it from MusicBrainz
-    - Try to get more artist information from MusicBrainz - Country etc
-        - Might have to do some data treatment on the 'artist_mbid' column because in some tracks the artist has mbid and in 
-        others he does not. Check if they contain more than 1. Perhaps choose the mbid with more recurrence
     - Find a more optimized/fast way of extracting the data, specially with track duration
         - Maybe paralelism?
 Chat GPT:
