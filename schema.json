@@ -1,0 +1,28 @@
+{
+    "Scrobble Data": {
+        "scrobble_number": "int64",
+        "track_name": "str",
+        "track_mbid": "str",
+        "date": "datetime64",
+        "duration_seconds": "int64",
+        "artist_name": "str",
+        "artist_mbid": "str",
+        "artist_listeners": "int64",
+        "artist_playcount": "int64",
+        "artist_image": "str",
+        "album_name": "str",
+        "album_mbid": "str",
+        "album_listeners": "int64",
+        "album_playcount": "int64"
+    },
+    "MusicBrainz Data": {
+        "artist_country": "str",
+        "artist_type": "str",
+        "artist_main_genre": "str",
+        "artist_career_begin": "datetime64",
+        "artist_career_end": "datetime64",
+        "artist_career_ended": "boolean"
+    }
+}
+
+
