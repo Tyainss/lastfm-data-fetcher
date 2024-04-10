@@ -587,37 +587,12 @@ output_excel(df=df_output, path=PATH_EXTRACT, schema=TRACK_DATA_SCHEMA)
 
 
 """ List of things to improve:
-    - Fix the schema to contain all new columns
-    [DONE] Correcting fetch_album_info function - Was simply returning the duration of the 1st song
-    [DONE] Now trying to add track name and track mbid to correctly identify the duration
-    
-    [DONE] To validate: (
-        Restructuring the code to prevent less API calls
-            - First create the main table exporting 1000 tracks by page
-            - Then create a helper table with every unique combination of album/artist (using drop_duplicates())
-            - Create a second helper table with every track and its duration for each album/artist
-            - Then do a left join of the 2nd helper table to the main table on ['artist_name', 'album_name', 'track_name']
-            - Save second helper table to speed up extraction by reducing API calls (include logic to check existing file)
-            - Create a third helper table with artist info for every unique artist in the main table
-            - Save thir helper table
-        )
-    [DONE] - Try increasing cap of songs per page to 1000 instead of 200
-    [DONE] - Add option of not bringing 'duration' info as it slows a lot the extraction and this way gives a quick option for users to extract data
-    [DONE] - Try getting 'duration' of each track, and the artist info, after exporting all the data, and only doing it by unique artist_name / album_name
-    [DONE] - Add Username as a column
-    [DONE] - Create table with User related data
     - Add validations - Scrobble_number vs # of rows in CSV
     - Format the code better to prevent a long piece of code - with classes | After finishing the code / not requiring high amounts of testing
     - Artist image is blank - Try to get it from MusicBrainz | Tableau seems to not be able to read all images correctly, even after getting them from Wikidata API
         - Not worth the effort for now
     - Find a more optimized/fast way of extracting the data, specially with track duration
         - Maybe paralelism?
-Chat GPT:
-Reduce API Calls: Currently, you are making multiple API calls for each track to fetch album information and artist information separately. Instead, try to retrieve all necessary information for a track in a single API call if possible.
-
-Batch Processing: Consider fetching track information in batches rather than fetching one track at a time. This can help reduce the overhead of making individual API calls for each track.
-
-Cache Data: If the data does not change frequently, consider caching the results of API calls locally to avoid redundant requests to the Last.fm API.
 
 Asynchronous Requests: Use asynchronous programming techniques or libraries like asyncio to make concurrent requests to the Last.fm API, which can significantly speed up the data retrieval process.
 """
