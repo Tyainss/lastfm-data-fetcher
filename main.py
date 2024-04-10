@@ -14,16 +14,32 @@ with open('config.json') as f:
 with open('schema.json') as f:
     schema = json.load(f)
 
+
+GET_EXTRA_INFO = config['GET_EXTRA_INFO']
+NEW_CSV = config["NEW_LASTFM_CSV"]
+NEW_MB_CSV = config["NEW_MUSICBRAINZ_CSV"]
+
+if NEW_CSV:
+    config['latest_track_date'] = ""
+    config['scrobble_number'] = 0
+    with open('config.json', 'w') as f:
+        print('Resetting config')
+        json.dump(config, f, indent=4)
+
 API_KEY = config['API_KEY']
 USERNAME = config['USERNAME']
 BASE_URL = 'http://ws.audioscrobbler.com/2.0/'
 PATH_EXTRACT = config['path_extracted_file'].replace('{username}', USERNAME)
+PATH_USER_INFO = config['path_user_info_file'].replace('{username}', USERNAME)
 LATEST_TRACK_DATE = config['latest_track_date']
 SCROBBLE_NUMBER = config['scrobble_number']
 
+PATH_HELPER_ALBUM_INFO = config['path_helper_album_artist']
+PATH_HELPER_ARTIST_INFO = config['path_helper_artist']
+
 MB_PATH_ARTIST_INFO = config['path_musicbrainz_artist_info']
-MB_CLIENT_ID = 'E8eQl4SWJo2IHcwlIx7swmH8OMN7cgwh'
-MB_CLIENT_SECRET = 'xydRuHhyg36PgMH5_P46E2qVQba1s1b7'
+MB_CLIENT_ID = config['MusicBrainz_Client_ID']
+MB_CLIENT_SECRET = config['MusicBrainz_Client_Secret']
 
 TRACK_DATA_SCHEMA = schema['Scrobble Data']
 MB_ARTIST_SCHEMA = schema['MusicBrainz Data']
@@ -33,6 +49,13 @@ if LATEST_TRACK_DATE:
     UNIX_LATEST_TRACK_DATE = str(int(LATEST_TRACK_DATE_obj.timestamp()))
 else:
     UNIX_LATEST_TRACK_DATE = None
+
+# def reset_config():
+#     config['latest_track_date'] = ""
+#     config['scrobble_number'] = 0
+
+# Reset the config tracker parameters if we decide to create a new CSV
+
 
 def get_country_name_from_iso_code(iso_code):
     try:
@@ -58,7 +81,19 @@ def fetch_user_data():
     }
     response = requests.get(BASE_URL, params=params)
     data = response.json()
-    return data['user']
+    user_info = data['user']
+    
+    user_data = {
+        'username': user_info['name']
+        , 'user_playcount': user_info['playcount']
+        , 'user_artist_count': user_info['artist_count']
+        , 'user_album_count': user_info['album_count']
+        , 'user_track_count': user_info['track_count']
+        , 'user_image': get_image_text(user_info.get('image', {}), 'extralarge')
+        , 'user_country': user_info['country']        
+    }
+    
+    return [user_data]
 
 # Get the total of pages of 200 tracks each for the user
 def get_total_pages(from_date=None, to_date=None):
@@ -69,7 +104,8 @@ def get_total_pages(from_date=None, to_date=None):
         'from': from_date,
         'to': to_date,
         'format': 'json',
-        'limit': 200  # Fetch only one track to get total number of pages
+        # 'limit': 200
+        'limit': 1000
     }
     response = requests.get(BASE_URL, params=params)
     data = response.json()
@@ -94,6 +130,7 @@ def extract_track_data(from_date=UNIX_LATEST_TRACK_DATE
         print('From date :', from_date_obj.strftime('%d %b %Y, %H:%M'))
     else:
         from_date_obj = None
+        print('Starting from beggining')
     
     # Define page interval
     page = total_pages
@@ -111,7 +148,8 @@ def extract_track_data(from_date=UNIX_LATEST_TRACK_DATE
             'to': to_date,
             'page': page,
             'extended': 0,
-            'limit': 200  # Maximum size by page
+            # 'limit': 200
+            'limit': 1000  # Maximum size by page
         }
         response = requests.get(BASE_URL, params=params)
         data = response.json()
@@ -153,27 +191,28 @@ def extract_track_data(from_date=UNIX_LATEST_TRACK_DATE
             track_name = track['name']
             track_mbid = track.get('mbid', '')
         
-            # Fetch album info to get track duration
-            album_data = fetch_album_info(artist_name, album_name)
-            artist_data = fetch_artist_info(artist_name)
+            # # Fetch album info to get track duration
+            # album_data = fetch_album_info(artist_name, album_name)
+            # artist_data = fetch_artist_info(artist_name)
             
             track_number += 1
             
             track_info = {
-                'scrobble_number': track_number,
-                'track_name': track_name,
-                'track_mbid': track_mbid,
-                'date': track_date,
-                'duration_seconds': album_data.get('duration', 0),
-                'artist_name': artist_name,
-                'artist_mbid': track['artist'].get('mbid', ''),
-                'artist_listeners': artist_data.get('listeners', 0),
-                'artist_playcount': artist_data.get('playcount', 0),
-                'artist_image': artist_data.get('image', ''),
-                'album_name': album_name,
-                'album_mbid': track['album'].get('mbid', ''),
-                'album_listeners': album_data.get('listeners', 0),
-                'album_playcount': album_data.get('playcount', 0)
+                'scrobble_number': track_number
+                , 'username': USERNAME
+                , 'track_name': track_name
+                , 'track_mbid': track_mbid
+                , 'date': track_date
+                # , 'duration_seconds': album_data.get('duration', 0)
+                , 'artist_name': artist_name
+                , 'artist_mbid': track['artist'].get('mbid', '')
+                # , 'artist_listeners': artist_data.get('listeners', 0)
+                # , 'artist_playcount': artist_data.get('playcount', 0)
+                # , 'artist_image': artist_data.get('image', '')
+                , 'album_name': album_name
+                , 'album_mbid': track['album'].get('mbid', '')
+                # , 'album_listeners': album_data.get('listeners', 0)
+                # , 'album_playcount': album_data.get('playcount', 0)
             }
             
             all_tracks.append(track_info)
@@ -196,7 +235,7 @@ def extract_track_data(from_date=UNIX_LATEST_TRACK_DATE
 
     return all_tracks
 
-# Function to fetch album info for a track
+# Function to fetch album info for a track and details for each track in the album
 def fetch_album_info(artist_name, album_name):
     params = {
         'method': 'album.getinfo',
@@ -208,15 +247,40 @@ def fetch_album_info(artist_name, album_name):
     response = requests.get(BASE_URL, params=params)
     data = response.json()
     
-    # Add album data
+    # Extract album data
     album_info = data.get('album', {})
-    album_data = {
-        'listeners': album_info.get('listeners', 0),
-        'playcount': album_info.get('playcount', 0),
-        'duration': get_track_duration(album_info)
-    }
+    album_listeners = album_info.get('listeners', 0)
+    album_playcount = album_info.get('playcount', 0)
     
-    return album_data
+    # Prepare list to hold track details
+    tracks_details = []
+    
+    # Extract tracks data
+    tracks = album_info.get('tracks', {}).get('track', [])
+    # Check if the song is a single
+    if isinstance(tracks, dict) and 'duration' in tracks:
+        track_details = {
+            'artist_name': artist_name,
+            'album_name': album_name,
+            'track_name': tracks.get('name', ''),
+            'album_listeners': album_listeners,
+            'album_playcount': album_playcount,
+            'track_duration': int(tracks.get('duration', 0) or 0)
+        }
+        tracks_details.append(track_details)
+    else:
+        for track in tracks:
+            track_details = {
+                'artist_name': artist_name,
+                'album_name': album_name,
+                'track_name': track.get('name', ''),
+                'album_listeners': album_listeners,
+                'album_playcount': album_playcount,
+                'track_duration': int(track.get('duration', 0) or 0)
+            }
+            tracks_details.append(track_details)
+    
+    return tracks_details
 
 # Function to fetch artist info
 def fetch_artist_info(artist_name):
@@ -232,9 +296,11 @@ def fetch_artist_info(artist_name):
     # Add artist data
     artist_info = data.get('artist', {})
     artist_data = {
-        'listeners': artist_info.get('stats', {}).get('listeners', 0),
-        'playcount': artist_info.get('stats', {}).get('playcount', 0),
-        'image': get_image_text(artist_info.get('image', {}), 'extralarge')
+        'artist_name': artist_name
+        , 'artist_mbid2': artist_info.get('mbid', '')
+        , 'artist_listeners': artist_info.get('stats', {}).get('listeners', 0)
+        , 'artist_playcount': artist_info.get('stats', {}).get('playcount', 0)
+        , 'artist_image': get_image_text(artist_info.get('image', {}), 'extralarge')
     }
     
     return artist_data
@@ -330,8 +396,6 @@ def fetch_artist_info_from_musicbrainz(artist_mbid_list):
     
     return all_artists
 
-
-
 # Function to extract '#text' value from 'image' column based on 'size'
 def get_image_text(image_list, size):
     for image in image_list:
@@ -347,12 +411,16 @@ def output_csv(df, path, append=False):
         print('New CSV')
         df.to_csv(path, index=False)
 
-def output_excel(df, path, schema=None):
+def output_excel(df, path, schema=None, append=False):
     if schema:
         # Convert DataFrame columns to the specified data types
         for column, dtype in schema.items():
             print('Column :', column, 'dtype :', dtype)
             df[column] = df[column].astype(dtype)
+    
+    if os.path.exists(path) and append:
+        existing_df = pd.read_excel(path)
+        df = pd.concat([existing_df, df], ignore_index=True)
     
     df.to_excel(path, index=False)
 
@@ -361,28 +429,94 @@ def convert_to_bool(x):
         return pd.NA # Use pandas' NA for missing values in boolean columns
     return bool(x)
     
+# Data treatment: Replace nan values based on schema dtype
+def replace_nan(df, schema):
+    for column, dtype in schema.items():
+        if dtype == 'str':
+            df[column].fillna('', inplace=True)
+        elif dtype == 'int64':
+            df[column].fillna(0, inplace=True)
 
-def reset_config():
-    config['latest_track_date'] = ""
-    config['scrobble_number'] = 0
-
-NEW_CSV = False
-NEW_MB_CSV = False
-
-# Reset the config tracker parameters if we decide to create a new CSV
-if NEW_CSV:
-    reset_config()
-    
-    with open('config.json', 'w') as f:
-        print('Resetting config')
-        json.dump(config, f, indent=4)
-    
-        
 # Fetch track data with duration
-lastfm_data = extract_track_data(number_pages=15)
+lastfm_data = extract_track_data(number_pages=5)
 
 # Create DataFrame with lastfm data
 df_lastfm = pd.DataFrame(lastfm_data)
+
+if GET_EXTRA_INFO:
+    # Create helper table with unique combinations of artist & album/artist
+    helper_df_artist = df_lastfm[['artist_name']].drop_duplicates()
+    helper_df_album_artist = df_lastfm[['artist_name', 'album_name']].drop_duplicates()
+
+    # Skip already extracted info
+    # Skip for albums
+    existing_helper_album_df = pd.DataFrame()
+    existing_helper_album_df_to_merge = pd.DataFrame(columns=helper_df_album_artist.columns)
+    if os.path.exists(PATH_HELPER_ALBUM_INFO):
+        existing_helper_album_df = pd.read_excel(PATH_HELPER_ALBUM_INFO)
+        existing_helper_album_df_to_merge = existing_helper_album_df[helper_df_album_artist.columns]
+    
+    merged = helper_df_album_artist.merge(existing_helper_album_df_to_merge, 
+                                          how='left',
+                                          indicator=True, 
+                                          on=['artist_name', 'album_name'])
+    
+    helper_df_album_artist = merged[merged['_merge']=='left_only']
+    helper_df_album_artist.drop(columns='_merge', inplace=True)
+    
+    # Skip for artists
+    existing_helper_artist_df = pd.DataFrame()
+    existing_helper_artist_df_to_merge = pd.DataFrame(columns=helper_df_artist.columns)
+    if os.path.exists(PATH_HELPER_ARTIST_INFO):
+        existing_helper_artist_df = pd.read_excel(PATH_HELPER_ARTIST_INFO)
+        existing_helper_artist_df_to_merge = existing_helper_artist_df[helper_df_artist.columns]
+
+    merged = helper_df_artist.merge(existing_helper_artist_df_to_merge, 
+                                          how='left',
+                                          indicator=True, 
+                                          on=['artist_name'])
+    
+    helper_df_artist = merged[merged['_merge']=='left_only']
+    helper_df_artist.drop(columns='_merge', inplace=True)
+
+    # Create second helper table with album & artist info
+    album_info_list = []
+    for _, row in helper_df_album_artist.iterrows():
+        artist_name = row['artist_name']
+        album_name = row['album_name']
+        album_info = fetch_album_info(artist_name, album_name)
+        # album_info_list.append(album_info)
+        album_info_list += album_info
+
+    df_album_info = pd.DataFrame(album_info_list)
+
+    artist_info_list = []
+    for _, row in helper_df_artist.iterrows():
+        artist_name = row['artist_name']
+        artist_info = fetch_artist_info(artist_name)
+        artist_info_list.append(artist_info)
+        # artist_info_list += artist_info
+
+    df_artist_info = pd.DataFrame(artist_info_list)
+
+    # Save the second helper tables
+    output_excel(df=df_album_info, path=PATH_HELPER_ALBUM_INFO, append=True)
+    output_excel(df=df_artist_info, path=PATH_HELPER_ARTIST_INFO, append=True)
+    
+    # Add new dataframes to existing dataframes
+    df_album_info = pd.concat([existing_helper_album_df, df_album_info]).drop_duplicates()
+    df_artist_info = pd.concat([existing_helper_artist_df, df_artist_info]).drop_duplicates()    
+    
+    # Add the helper tables to the main lastfm dataframe
+    df_lastfm = df_lastfm.merge(df_album_info, how='left', on=['track_name', 'artist_name', 'album_name'])
+    df_lastfm = df_lastfm.merge(df_artist_info, how='left', on=['artist_name'])
+
+# Fetch and extract user data into Excel
+user_data = fetch_user_data()
+df_user = pd.DataFrame(user_data)
+output_excel(df=df_user, path=PATH_USER_INFO)
+
+
 
 """
 Let's do some treatment on the artist_mbid. In some rows, for artist that already
@@ -409,8 +543,7 @@ artist_mbid_mapping = artist_mbid_counts.sort_values(by='count', ascending=False
 
 # Fix artist_mbid in both new data and existing data
 for df in [df_lastfm, df_existing_lastfm_data]:
-    df['artist_mbid'] = df.apply(fill_missing_artist_mbid, axis=1)
-# df_existing_lastfm_data['artist_mbid'] = df_lastfm.apply(fill_missing_artist_mbid, axis=1)
+    if not df.empty: df['artist_mbid'] = df.apply(fill_missing_artist_mbid, axis=1)
 
 
 list_artist_mbid = list(set(df_lastfm[df_lastfm['artist_mbid'].notna()]['artist_mbid']))
@@ -418,7 +551,7 @@ list_artist_mbid = list(set(df_lastfm[df_lastfm['artist_mbid'].notna()]['artist_
 # else, fetch data from all artists
 df_existing_mb_artist_info = pd.DataFrame()
 if os.path.exists(MB_PATH_ARTIST_INFO) and not NEW_MB_CSV:
-    df_existing_mb_artist_info = pd.read_csv(MB_PATH_ARTIST_INFO)
+    df_existing_mb_artist_info = pd.read_excel(MB_PATH_ARTIST_INFO)
     mbids_already_extracted = list(set(df_existing_mb_artist_info[df_existing_mb_artist_info['artist_mbid'].notna()]['artist_mbid']))
     
     artists_to_extract = [mbid for mbid in list_artist_mbid if (mbid and mbid not in mbids_already_extracted)]
@@ -444,6 +577,9 @@ output_excel(df=df_mb_artist, path=MB_PATH_ARTIST_INFO, schema=MB_ARTIST_SCHEMA)
 # Merge new data into existing data (whose artist_mbid has been corrected)
 df_output = pd.concat([df_existing_lastfm_data, df_lastfm])
 
+# Do some data treatment on the output dataframe
+replace_nan(df=df_output, schema=TRACK_DATA_SCHEMA)
+
 # Output the CSV with track data
 output_excel(df=df_output, path=PATH_EXTRACT, schema=TRACK_DATA_SCHEMA)
 # output_csv(df=df_merged, path=PATH_EXTRACT)
@@ -451,6 +587,25 @@ output_excel(df=df_output, path=PATH_EXTRACT, schema=TRACK_DATA_SCHEMA)
 
 
 """ List of things to improve:
+    - Fix the schema to contain all new columns
+    [DONE] Correcting fetch_album_info function - Was simply returning the duration of the 1st song
+    [DONE] Now trying to add track name and track mbid to correctly identify the duration
+    
+    [DONE] To validate: (
+        Restructuring the code to prevent less API calls
+            - First create the main table exporting 1000 tracks by page
+            - Then create a helper table with every unique combination of album/artist (using drop_duplicates())
+            - Create a second helper table with every track and its duration for each album/artist
+            - Then do a left join of the 2nd helper table to the main table on ['artist_name', 'album_name', 'track_name']
+            - Save second helper table to speed up extraction by reducing API calls (include logic to check existing file)
+            - Create a third helper table with artist info for every unique artist in the main table
+            - Save thir helper table
+        )
+    [DONE] - Try increasing cap of songs per page to 1000 instead of 200
+    [DONE] - Add option of not bringing 'duration' info as it slows a lot the extraction and this way gives a quick option for users to extract data
+    [DONE] - Try getting 'duration' of each track, and the artist info, after exporting all the data, and only doing it by unique artist_name / album_name
+    [DONE] - Add Username as a column
+    [DONE] - Create table with User related data
     - Add validations - Scrobble_number vs # of rows in CSV
     - Format the code better to prevent a long piece of code - with classes | After finishing the code / not requiring high amounts of testing
     - Artist image is blank - Try to get it from MusicBrainz | Tableau seems to not be able to read all images correctly, even after getting them from Wikidata API
