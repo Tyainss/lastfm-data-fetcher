@@ -34,6 +34,7 @@ PATH_USER_INFO = config['path_user_info_file'].replace('{username}', USERNAME)
 LATEST_TRACK_DATE = config['latest_track_date']
 SCROBBLE_NUMBER = config['scrobble_number']
 
+EXTRACT_FOLDER = config['extract_folder']
 PATH_HELPER_ALBUM_INFO = config['path_helper_album_artist']
 PATH_HELPER_ARTIST_INFO = config['path_helper_artist']
 
@@ -50,12 +51,8 @@ if LATEST_TRACK_DATE:
 else:
     UNIX_LATEST_TRACK_DATE = None
 
-# def reset_config():
-#     config['latest_track_date'] = ""
-#     config['scrobble_number'] = 0
-
-# Reset the config tracker parameters if we decide to create a new CSV
-
+if not os.path.exists(EXTRACT_FOLDER):
+    os.makedirs(EXTRACT_FOLDER)
 
 def get_country_name_from_iso_code(iso_code):
     try:
@@ -104,7 +101,6 @@ def get_total_pages(from_date=None, to_date=None):
         'from': from_date,
         'to': to_date,
         'format': 'json',
-        # 'limit': 200
         'limit': 1000
     }
     response = requests.get(BASE_URL, params=params)
@@ -148,7 +144,6 @@ def extract_track_data(from_date=UNIX_LATEST_TRACK_DATE
             'to': to_date,
             'page': page,
             'extended': 0,
-            # 'limit': 200
             'limit': 1000  # Maximum size by page
         }
         response = requests.get(BASE_URL, params=params)
@@ -190,10 +185,6 @@ def extract_track_data(from_date=UNIX_LATEST_TRACK_DATE
             album_name = track['album']['#text']
             track_name = track['name']
             track_mbid = track.get('mbid', '')
-        
-            # # Fetch album info to get track duration
-            # album_data = fetch_album_info(artist_name, album_name)
-            # artist_data = fetch_artist_info(artist_name)
             
             track_number += 1
             
@@ -203,16 +194,10 @@ def extract_track_data(from_date=UNIX_LATEST_TRACK_DATE
                 , 'track_name': track_name
                 , 'track_mbid': track_mbid
                 , 'date': track_date
-                # , 'duration_seconds': album_data.get('duration', 0)
                 , 'artist_name': artist_name
                 , 'artist_mbid': track['artist'].get('mbid', '')
-                # , 'artist_listeners': artist_data.get('listeners', 0)
-                # , 'artist_playcount': artist_data.get('playcount', 0)
-                # , 'artist_image': artist_data.get('image', '')
                 , 'album_name': album_name
                 , 'album_mbid': track['album'].get('mbid', '')
-                # , 'album_listeners': album_data.get('listeners', 0)
-                # , 'album_playcount': album_data.get('playcount', 0)
             }
             
             all_tracks.append(track_info)
@@ -228,7 +213,6 @@ def extract_track_data(from_date=UNIX_LATEST_TRACK_DATE
             config['scrobble_number'] = track_number
     
             # Update json file with the most recent date
-            # with open('new_config.json', 'w') as f: # Replace by 'config.json' after
             with open('config.json', 'w') as f:
                 print('Updated latest extracted date in config')
                 json.dump(config, f, indent=4)
@@ -377,9 +361,15 @@ def fetch_artist_info_from_musicbrainz(artist_mbid_list):
         
         # Data treatment on dates to have them in yyyy-MM-DD format
         if career_begin:
-            career_begin = pd.to_datetime(career_begin).strftime('%Y-%m-%d')
+            try:
+                career_begin = pd.to_datetime(career_begin).strftime('%Y-%m-%d')
+            except:
+                career_begin = ''
         if career_end:
-            career_end = pd.to_datetime(career_end).strftime('%Y-%m-%d')
+            try:
+                career_end = pd.to_datetime(career_end).strftime('%Y-%m-%d')
+            except:
+                career_end = ''
         
         artist_info = {
             'artist_mbid': artist_mbid
@@ -438,7 +428,7 @@ def replace_nan(df, schema):
             df[column].fillna(0, inplace=True)
 
 # Fetch track data with duration
-lastfm_data = extract_track_data(number_pages=5)
+lastfm_data = extract_track_data(number_pages=10)
 
 # Create DataFrame with lastfm data
 df_lastfm = pd.DataFrame(lastfm_data)
@@ -485,7 +475,6 @@ if GET_EXTRA_INFO:
         artist_name = row['artist_name']
         album_name = row['album_name']
         album_info = fetch_album_info(artist_name, album_name)
-        # album_info_list.append(album_info)
         album_info_list += album_info
 
     df_album_info = pd.DataFrame(album_info_list)
@@ -495,7 +484,6 @@ if GET_EXTRA_INFO:
         artist_name = row['artist_name']
         artist_info = fetch_artist_info(artist_name)
         artist_info_list.append(artist_info)
-        # artist_info_list += artist_info
 
     df_artist_info = pd.DataFrame(artist_info_list)
 
@@ -566,12 +554,7 @@ df_mb_artist = pd.DataFrame(mb_artist_data)
 df_mb_artist = pd.concat([df_mb_artist, df_existing_mb_artist_info])
 
 # Output the CSV with artist info from Music Brainz
-# output_csv(df=df_mb_artist, path=MB_PATH_ARTIST_INFO, append=(not NEW_MB_CSV))
 output_excel(df=df_mb_artist, path=MB_PATH_ARTIST_INFO, schema=MB_ARTIST_SCHEMA)
-
-
-# Update the Lastfm data with the MB artist data
-# df_merged = df_lastfm.merge(df_mb_artist, how='left', on='artist_mbid')
 
 
 # Merge new data into existing data (whose artist_mbid has been corrected)
@@ -582,42 +565,15 @@ replace_nan(df=df_output, schema=TRACK_DATA_SCHEMA)
 
 # Output the CSV with track data
 output_excel(df=df_output, path=PATH_EXTRACT, schema=TRACK_DATA_SCHEMA)
-# output_csv(df=df_merged, path=PATH_EXTRACT)
-# df_merged.to_csv(PATH_EXTRACT, index=False)
 
 
 """ List of things to improve:
-    - Fix the schema to contain all new columns
-    [DONE] Correcting fetch_album_info function - Was simply returning the duration of the 1st song
-    [DONE] Now trying to add track name and track mbid to correctly identify the duration
-    
-    [DONE] To validate: (
-        Restructuring the code to prevent less API calls
-            - First create the main table exporting 1000 tracks by page
-            - Then create a helper table with every unique combination of album/artist (using drop_duplicates())
-            - Create a second helper table with every track and its duration for each album/artist
-            - Then do a left join of the 2nd helper table to the main table on ['artist_name', 'album_name', 'track_name']
-            - Save second helper table to speed up extraction by reducing API calls (include logic to check existing file)
-            - Create a third helper table with artist info for every unique artist in the main table
-            - Save thir helper table
-        )
-    [DONE] - Try increasing cap of songs per page to 1000 instead of 200
-    [DONE] - Add option of not bringing 'duration' info as it slows a lot the extraction and this way gives a quick option for users to extract data
-    [DONE] - Try getting 'duration' of each track, and the artist info, after exporting all the data, and only doing it by unique artist_name / album_name
-    [DONE] - Add Username as a column
-    [DONE] - Create table with User related data
     - Add validations - Scrobble_number vs # of rows in CSV
     - Format the code better to prevent a long piece of code - with classes | After finishing the code / not requiring high amounts of testing
     - Artist image is blank - Try to get it from MusicBrainz | Tableau seems to not be able to read all images correctly, even after getting them from Wikidata API
         - Not worth the effort for now
     - Find a more optimized/fast way of extracting the data, specially with track duration
         - Maybe paralelism?
-Chat GPT:
-Reduce API Calls: Currently, you are making multiple API calls for each track to fetch album information and artist information separately. Instead, try to retrieve all necessary information for a track in a single API call if possible.
-
-Batch Processing: Consider fetching track information in batches rather than fetching one track at a time. This can help reduce the overhead of making individual API calls for each track.
-
-Cache Data: If the data does not change frequently, consider caching the results of API calls locally to avoid redundant requests to the Last.fm API.
 
 Asynchronous Requests: Use asynchronous programming techniques or libraries like asyncio to make concurrent requests to the Last.fm API, which can significantly speed up the data retrieval process.
 """
