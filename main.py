@@ -50,11 +50,6 @@ if LATEST_TRACK_DATE:
 else:
     UNIX_LATEST_TRACK_DATE = None
 
-# def reset_config():
-#     config['latest_track_date'] = ""
-#     config['scrobble_number'] = 0
-
-# Reset the config tracker parameters if we decide to create a new CSV
 
 
 def get_country_name_from_iso_code(iso_code):
@@ -104,7 +99,6 @@ def get_total_pages(from_date=None, to_date=None):
         'from': from_date,
         'to': to_date,
         'format': 'json',
-        # 'limit': 200
         'limit': 1000
     }
     response = requests.get(BASE_URL, params=params)
@@ -148,7 +142,6 @@ def extract_track_data(from_date=UNIX_LATEST_TRACK_DATE
             'to': to_date,
             'page': page,
             'extended': 0,
-            # 'limit': 200
             'limit': 1000  # Maximum size by page
         }
         response = requests.get(BASE_URL, params=params)
@@ -190,10 +183,6 @@ def extract_track_data(from_date=UNIX_LATEST_TRACK_DATE
             album_name = track['album']['#text']
             track_name = track['name']
             track_mbid = track.get('mbid', '')
-        
-            # # Fetch album info to get track duration
-            # album_data = fetch_album_info(artist_name, album_name)
-            # artist_data = fetch_artist_info(artist_name)
             
             track_number += 1
             
@@ -203,16 +192,10 @@ def extract_track_data(from_date=UNIX_LATEST_TRACK_DATE
                 , 'track_name': track_name
                 , 'track_mbid': track_mbid
                 , 'date': track_date
-                # , 'duration_seconds': album_data.get('duration', 0)
                 , 'artist_name': artist_name
                 , 'artist_mbid': track['artist'].get('mbid', '')
-                # , 'artist_listeners': artist_data.get('listeners', 0)
-                # , 'artist_playcount': artist_data.get('playcount', 0)
-                # , 'artist_image': artist_data.get('image', '')
                 , 'album_name': album_name
                 , 'album_mbid': track['album'].get('mbid', '')
-                # , 'album_listeners': album_data.get('listeners', 0)
-                # , 'album_playcount': album_data.get('playcount', 0)
             }
             
             all_tracks.append(track_info)
@@ -228,7 +211,6 @@ def extract_track_data(from_date=UNIX_LATEST_TRACK_DATE
             config['scrobble_number'] = track_number
     
             # Update json file with the most recent date
-            # with open('new_config.json', 'w') as f: # Replace by 'config.json' after
             with open('config.json', 'w') as f:
                 print('Updated latest extracted date in config')
                 json.dump(config, f, indent=4)
@@ -438,7 +420,7 @@ def replace_nan(df, schema):
             df[column].fillna(0, inplace=True)
 
 # Fetch track data with duration
-lastfm_data = extract_track_data(number_pages=5)
+lastfm_data = extract_track_data(number_pages=20)
 
 # Create DataFrame with lastfm data
 df_lastfm = pd.DataFrame(lastfm_data)
@@ -485,7 +467,6 @@ if GET_EXTRA_INFO:
         artist_name = row['artist_name']
         album_name = row['album_name']
         album_info = fetch_album_info(artist_name, album_name)
-        # album_info_list.append(album_info)
         album_info_list += album_info
 
     df_album_info = pd.DataFrame(album_info_list)
@@ -495,7 +476,6 @@ if GET_EXTRA_INFO:
         artist_name = row['artist_name']
         artist_info = fetch_artist_info(artist_name)
         artist_info_list.append(artist_info)
-        # artist_info_list += artist_info
 
     df_artist_info = pd.DataFrame(artist_info_list)
 
@@ -566,12 +546,7 @@ df_mb_artist = pd.DataFrame(mb_artist_data)
 df_mb_artist = pd.concat([df_mb_artist, df_existing_mb_artist_info])
 
 # Output the CSV with artist info from Music Brainz
-# output_csv(df=df_mb_artist, path=MB_PATH_ARTIST_INFO, append=(not NEW_MB_CSV))
 output_excel(df=df_mb_artist, path=MB_PATH_ARTIST_INFO, schema=MB_ARTIST_SCHEMA)
-
-
-# Update the Lastfm data with the MB artist data
-# df_merged = df_lastfm.merge(df_mb_artist, how='left', on='artist_mbid')
 
 
 # Merge new data into existing data (whose artist_mbid has been corrected)
@@ -582,8 +557,6 @@ replace_nan(df=df_output, schema=TRACK_DATA_SCHEMA)
 
 # Output the CSV with track data
 output_excel(df=df_output, path=PATH_EXTRACT, schema=TRACK_DATA_SCHEMA)
-# output_csv(df=df_merged, path=PATH_EXTRACT)
-# df_merged.to_csv(PATH_EXTRACT, index=False)
 
 
 """ List of things to improve:
