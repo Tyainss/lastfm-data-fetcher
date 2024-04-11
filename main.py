@@ -34,6 +34,7 @@ PATH_USER_INFO = config['path_user_info_file'].replace('{username}', USERNAME)
 LATEST_TRACK_DATE = config['latest_track_date']
 SCROBBLE_NUMBER = config['scrobble_number']
 
+EXTRACT_FOLDER = config['extract_folder']
 PATH_HELPER_ALBUM_INFO = config['path_helper_album_artist']
 PATH_HELPER_ARTIST_INFO = config['path_helper_artist']
 
@@ -50,7 +51,8 @@ if LATEST_TRACK_DATE:
 else:
     UNIX_LATEST_TRACK_DATE = None
 
-
+if not os.path.exists(EXTRACT_FOLDER):
+    os.makedirs(EXTRACT_FOLDER)
 
 def get_country_name_from_iso_code(iso_code):
     try:
@@ -359,9 +361,15 @@ def fetch_artist_info_from_musicbrainz(artist_mbid_list):
         
         # Data treatment on dates to have them in yyyy-MM-DD format
         if career_begin:
-            career_begin = pd.to_datetime(career_begin).strftime('%Y-%m-%d')
+            try:
+                career_begin = pd.to_datetime(career_begin).strftime('%Y-%m-%d')
+            except:
+                career_begin = ''
         if career_end:
-            career_end = pd.to_datetime(career_end).strftime('%Y-%m-%d')
+            try:
+                career_end = pd.to_datetime(career_end).strftime('%Y-%m-%d')
+            except:
+                career_end = ''
         
         artist_info = {
             'artist_mbid': artist_mbid
@@ -420,7 +428,7 @@ def replace_nan(df, schema):
             df[column].fillna(0, inplace=True)
 
 # Fetch track data with duration
-lastfm_data = extract_track_data(number_pages=20)
+lastfm_data = extract_track_data(number_pages=10)
 
 # Create DataFrame with lastfm data
 df_lastfm = pd.DataFrame(lastfm_data)
