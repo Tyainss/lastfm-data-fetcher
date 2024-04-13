@@ -14,15 +14,13 @@
         "album_playcount": "int64",
         "artist_mbid2": "str",
         "artist_listeners": "int64",
-        "artist_playcount": "int64",
-        "artist_image": "str"
+        "artist_playcount": "int64"
     },
     "Artist Data":{
         "artist_name": "str",
         "artist_mbid": "str",
         "artist_listeners": "int64",
-        "artist_playcount": "int64",
-        "artist_image": "str"
+        "artist_playcount": "int64"
     },
 
     "MusicBrainz Data": {

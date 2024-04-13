@@ -284,7 +284,7 @@ def fetch_artist_info(artist_name):
         , 'artist_mbid2': artist_info.get('mbid', '')
         , 'artist_listeners': artist_info.get('stats', {}).get('listeners', 0)
         , 'artist_playcount': artist_info.get('stats', {}).get('playcount', 0)
-        , 'artist_image': get_image_text(artist_info.get('image', {}), 'extralarge')
+        # , 'artist_image': get_image_text(artist_info.get('image', {}), 'extralarge')
     }
     
     return artist_data
@@ -335,22 +335,22 @@ def fetch_artist_info_from_musicbrainz(artist_mbid_list):
         # response = requests.get(url, headers=headers)
         response = requests.get(url)
         data = response.json()
-    
-        tags = data['tags']
+
+        tags = data.get('tags', '')
         if tags:
             tags.sort(reverse=True, key=lambda x: x['count'])
             main_genre = tags[0].get('name')
         else:
             main_genre = None
         
-        country_1 = data['country']
+        country_1 = data.get('country', '')
         country_2 = data.get('area', {}).get('iso-3166-1-codes', [''])[0]
         country_name = get_country_name_from_iso_code(country_2 if country_2 else country_1)
         
         career_begin = data.get('life-span', {}).get('begin')
         career_end = data.get('life-span', {}).get('end')
         career_ended = data.get('life-span', {}).get('ended')
-        artist_type = data['type']
+        artist_type = data.get('type', '')
         
         # # Extracting artist image URL
         # artist_image_url = None
@@ -380,6 +380,7 @@ def fetch_artist_info_from_musicbrainz(artist_mbid_list):
             , 'artist_career_end': career_end
             , 'artist_career_ended': career_ended
             # , 'artist_image_url': artist_image_url  # Added artist image URL
+            # , 'artist_image_url': ''
         }
         
         all_artists.append(artist_info)
@@ -401,7 +402,19 @@ def output_csv(df, path, append=False):
         print('New CSV')
         df.to_csv(path, index=False)
 
+def read_excel(path, schema=None):
+    print('Reading Excel')
+    df = pd.read_excel(path)
+    if schema:
+        # Convert DataFrame columns to the specified data types
+        for column, dtype in schema.items():
+            print('Column :', column, 'dtype :', dtype)
+            df[column] = df[column].astype(dtype)
+    
+    return df
+
 def output_excel(df, path, schema=None, append=False):
+    print('Outputting Excel')
     if schema:
         # Convert DataFrame columns to the specified data types
         for column, dtype in schema.items():
@@ -409,7 +422,7 @@ def output_excel(df, path, schema=None, append=False):
             df[column] = df[column].astype(dtype)
     
     if os.path.exists(path) and append:
-        existing_df = pd.read_excel(path)
+        existing_df = read_excel(path=path, schema=schema)
         df = pd.concat([existing_df, df], ignore_index=True)
     
     df.to_excel(path, index=False)
@@ -428,7 +441,7 @@ def replace_nan(df, schema):
             df[column].fillna(0, inplace=True)
 
 # Fetch track data with duration
-lastfm_data = extract_track_data(number_pages=10)
+lastfm_data = extract_track_data()
 
 # Create DataFrame with lastfm data
 df_lastfm = pd.DataFrame(lastfm_data)
@@ -443,7 +456,7 @@ if GET_EXTRA_INFO:
     existing_helper_album_df = pd.DataFrame()
     existing_helper_album_df_to_merge = pd.DataFrame(columns=helper_df_album_artist.columns)
     if os.path.exists(PATH_HELPER_ALBUM_INFO):
-        existing_helper_album_df = pd.read_excel(PATH_HELPER_ALBUM_INFO)
+        existing_helper_album_df = read_excel(path=PATH_HELPER_ALBUM_INFO)
         existing_helper_album_df_to_merge = existing_helper_album_df[helper_df_album_artist.columns]
     
     merged = helper_df_album_artist.merge(existing_helper_album_df_to_merge, 
@@ -458,7 +471,7 @@ if GET_EXTRA_INFO:
     existing_helper_artist_df = pd.DataFrame()
     existing_helper_artist_df_to_merge = pd.DataFrame(columns=helper_df_artist.columns)
     if os.path.exists(PATH_HELPER_ARTIST_INFO):
-        existing_helper_artist_df = pd.read_excel(PATH_HELPER_ARTIST_INFO)
+        existing_helper_artist_df = read_excel(path=PATH_HELPER_ARTIST_INFO)
         existing_helper_artist_df_to_merge = existing_helper_artist_df[helper_df_artist.columns]
 
     merged = helper_df_artist.merge(existing_helper_artist_df_to_merge, 
@@ -492,7 +505,9 @@ if GET_EXTRA_INFO:
     output_excel(df=df_artist_info, path=PATH_HELPER_ARTIST_INFO, append=True)
     
     # Add new dataframes to existing dataframes
-    df_album_info = pd.concat([existing_helper_album_df, df_album_info]).drop_duplicates()
+    df_album_info = pd.concat([existing_helper_album_df, df_album_info])
+    df_album_info = df_album_info.sort_values('track_duration', ascending=False).drop_duplicates(['artist_name', 'album_name', 'track_name'])
+    
     df_artist_info = pd.concat([existing_helper_artist_df, df_artist_info]).drop_duplicates()    
     
     # Add the helper tables to the main lastfm dataframe
@@ -521,7 +536,7 @@ def fill_missing_artist_mbid(row):
 # Append already extracted data since some artists might still have a 'null' artist_mbid
 df_existing_lastfm_data = pd.DataFrame(columns = TRACK_DATA_SCHEMA.keys())
 if os.path.exists(PATH_EXTRACT) and not NEW_CSV:
-    df_existing_lastfm_data = pd.read_excel(PATH_EXTRACT)
+    df_existing_lastfm_data = read_excel(path=PATH_EXTRACT, schema=TRACK_DATA_SCHEMA)
 
 # Append new data to bottom of existing csv
 temp_df = pd.concat([df_existing_lastfm_data, df_lastfm], ignore_index=True)
@@ -539,7 +554,8 @@ list_artist_mbid = list(set(df_lastfm[df_lastfm['artist_mbid'].notna()]['artist_
 # else, fetch data from all artists
 df_existing_mb_artist_info = pd.DataFrame()
 if os.path.exists(MB_PATH_ARTIST_INFO) and not NEW_MB_CSV:
-    df_existing_mb_artist_info = pd.read_excel(MB_PATH_ARTIST_INFO)
+    # df_existing_mb_artist_info = pd.read_excel(MB_PATH_ARTIST_INFO)
+    df_existing_mb_artist_info = read_excel(path=MB_PATH_ARTIST_INFO, schema=MB_ARTIST_SCHEMA)
     mbids_already_extracted = list(set(df_existing_mb_artist_info[df_existing_mb_artist_info['artist_mbid'].notna()]['artist_mbid']))
     
     artists_to_extract = [mbid for mbid in list_artist_mbid if (mbid and mbid not in mbids_already_extracted)]
@@ -551,7 +567,7 @@ mb_artist_data = fetch_artist_info_from_musicbrainz(artists_to_extract)
 
 df_mb_artist = pd.DataFrame(mb_artist_data)
 # Concating new artist info with the existing artist info
-df_mb_artist = pd.concat([df_mb_artist, df_existing_mb_artist_info])
+df_mb_artist = pd.concat([df_mb_artist, df_existing_mb_artist_info], ignore_index=True)
 
 # Output the CSV with artist info from Music Brainz
 output_excel(df=df_mb_artist, path=MB_PATH_ARTIST_INFO, schema=MB_ARTIST_SCHEMA)
@@ -568,6 +584,10 @@ output_excel(df=df_output, path=PATH_EXTRACT, schema=TRACK_DATA_SCHEMA)
 
 
 """ List of things to improve:
+    - Try to do some data treatment on the tracks with 0 track_duration
+        - Perhaps average of track_duration of the artist?
+    - Improve logging of functions
+        - Add a way to know the % of completion of each extract loop
     - Add validations - Scrobble_number vs # of rows in CSV
     - Format the code better to prevent a long piece of code - with classes | After finishing the code / not requiring high amounts of testing
     - Artist image is blank - Try to get it from MusicBrainz | Tableau seems to not be able to read all images correctly, even after getting them from Wikidata API
