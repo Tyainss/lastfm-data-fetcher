@@ -1,4 +1,7 @@
 import json
+from datetime import datetime
+import os
+import pycountry
 
 class ConfigManager:
     def __init__(self, config_path='config.json', schema_path='schema.json'):
@@ -6,6 +9,13 @@ class ConfigManager:
         self.schema_path = schema_path
         self.config = self.load_json(config_path)
         self.schema = self.load_json(schema_path)
+
+        self.GET_EXTRA_INFO = self.config['GET_EXTRA_INFO']
+        self.NEW_CSV = self.config["NEW_LASTFM_CSV"]
+        self.NEW_MB_CSV = self.config["NEW_MUSICBRAINZ_CSV"]
+
+        if self.NEW_CSV:
+            self.reset_config()
 
         self.API_KEY = self.config['API_KEY']
         self.USERNAME = self.config['USERNAME']
@@ -20,9 +30,34 @@ class ConfigManager:
         self.MB_PATH_ARTIST_INFO = self.config['path_musicbrainz_artist_info']
         self.MB_CLIENT_ID = self.config['MusicBrainz_Client_ID']
         self.MB_CLIENT_SECRET = self.config['MusicBrainz_Client_Secret']
-        
+
         self.TRACK_DATA_SCHEMA = self.schema['Scrobble Data']
         self.MB_ARTIST_SCHEMA = self.schema['MusicBrainz Data']
+
+        self.ensure_folder_exists(self.EXTRACT_FOLDER)
+        self.get_unix_latest_track_date(self.LATEST_TRACK_DATE)
+
+    def ensure_folder_exists(self, folder_path):
+        if not os.path.exists(folder_path):
+            os.makedirs(folder_path)
+
+    def get_unix_latest_track_date(self, date):
+        if date:
+            date_obj = datetime.strptime(date, '%d %b %Y, %H:%M')
+            return str(int(date_obj.timestamp()))
+        else:
+            return None
+
+    def get_country_name_from_iso_code(self, iso_code):
+        try:
+            country = pycountry.countries.get(alpha_2=iso_code.upper())
+            return country.name if country else 'Unknown'
+        except AttributeError:
+            return 'Unknown'
+        except Exception as e:
+            print(f'Error: {e}')
+            return 'Unknown'
+
 
     def load_json(self, path):
         try:
