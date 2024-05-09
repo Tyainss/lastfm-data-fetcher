@@ -1,7 +1,7 @@
 import json
-from datetime import datetime
 import os
-import pycountry
+
+from helper import Helper
 
 class ConfigManager:
     def __init__(self, config_path='config.json', schema_path='schema.json'):
@@ -35,29 +35,11 @@ class ConfigManager:
         self.MB_ARTIST_SCHEMA = self.schema['MusicBrainz Data']
 
         self.ensure_folder_exists(self.EXTRACT_FOLDER)
-        self.get_unix_latest_track_date(self.LATEST_TRACK_DATE)
+        self.UNIX_LATEST_TRACK_DATE = Helper().get_unix_latest_track_date(self.LATEST_TRACK_DATE)
 
     def ensure_folder_exists(self, folder_path):
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
-
-    def get_unix_latest_track_date(self, date):
-        if date:
-            date_obj = datetime.strptime(date, '%d %b %Y, %H:%M')
-            return str(int(date_obj.timestamp()))
-        else:
-            return None
-
-    def get_country_name_from_iso_code(self, iso_code):
-        try:
-            country = pycountry.countries.get(alpha_2=iso_code.upper())
-            return country.name if country else 'Unknown'
-        except AttributeError:
-            return 'Unknown'
-        except Exception as e:
-            print(f'Error: {e}')
-            return 'Unknown'
-
 
     def load_json(self, path):
         try:
@@ -88,3 +70,4 @@ class ConfigManager:
         self.config['latest_track_date'] = date
         self.config['scrobble_number'] = track_number
         self.save_json(self.config_path, self.config)
+
