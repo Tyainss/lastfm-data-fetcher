@@ -4,7 +4,7 @@ from datetime import datetime
 from helper import Helper
 from config_manager import ConfigManager
 
-class LASTFMAPI:
+class LastFMAPI:
     def __init__(self, api_key, base_url, username):
         self.config_manager = ConfigManager()
         self.helper = Helper()
@@ -155,7 +155,8 @@ class LASTFMAPI:
         most_recent_date_track = page_most_recent_track
         most_recent_date_track_obj = page_most_recent_track_obj
         LATEST_TRACK_DATE = self.config_manager.LATEST_TRACK_DATE
-        LATEST_TRACK_DATE_obj = datetime.strptime(LATEST_TRACK_DATE, '%d %b %Y, %H:%M')
+        if LATEST_TRACK_DATE: 
+            LATEST_TRACK_DATE_obj = datetime.strptime(LATEST_TRACK_DATE, '%d %b %Y, %H:%M')
 
         if update_config:
             if not LATEST_TRACK_DATE or most_recent_date_track_obj >= LATEST_TRACK_DATE_obj:
@@ -173,7 +174,11 @@ class LASTFMAPI:
             'format': 'json'
         }
         response = requests.get(self.base_url, params=params)
-        data = response.json()
+        try:
+            data = response.json()
+        except Exception as e:
+            print(f'Error {e} fetching artist info for artist: ', artist_name)
+            data = {}
         
         # Add artist data
         artist_info = data.get('artist', {})

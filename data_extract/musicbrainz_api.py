@@ -2,9 +2,11 @@ import requests
 import time
 import pandas as pd
 
+from helper import Helper
 
 class MusicBrainzAPI:
     def __init__(self):
+        self.helper = Helper()
         pass
 
     def fetch_artist_info_from_musicbrainz(self, artist_mbid_list):

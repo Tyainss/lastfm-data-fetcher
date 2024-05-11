@@ -29,13 +29,13 @@ class Helper:
         else:
             return None
 
-    def convert_to_bool(x):
+    def convert_to_bool(self, x):
         if pd.isna(x):
             return pd.NA # Use pandas' NA for missing values in boolean columns
         return bool(x)
         
     # Data treatment: Replace nan values based on schema dtype
-    def replace_nan(df, schema):
+    def replace_nan(self, df, schema):
         for column, dtype in schema.items():
             if dtype == 'str':
                 df[column].fillna('', inplace=True)

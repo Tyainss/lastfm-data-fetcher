@@ -7,14 +7,14 @@ class DataStorage:
 
     def output_csv(self, path, df, append=False):
         if append:
-            print('Adding to existing CSV')
+            print('Adding to existing CSV to: ', path)
             df.to_csv(path, mode='a', index=False, header=False)
         else:
-            print('New CSV')
+            print('New CSV to: ', path)
             df.to_csv(path, index=False)
 
     def read_excel(self, path, schema=None):
-        print('Reading Excel')
+        print('Reading Excel from: ', path)
         df = pd.read_excel(path)
         if schema:
             # Convert DataFrame columns to the specified data types
@@ -25,7 +25,7 @@ class DataStorage:
         return df
 
     def output_excel(self, path, df, schema=None, append=False):
-        print('Outputting Excel')
+        print('Outputting Excel to: ', path)
         if schema:
             # Convert DataFrame columns to the specified data types
             for column, dtype in schema.items():

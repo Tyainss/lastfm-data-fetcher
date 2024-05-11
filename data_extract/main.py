@@ -34,6 +34,7 @@ class LastFMDataExtractor:
         an artist cant have more than 1 artist_mbid, lets map the artist to the mbid
         that appears the most to him to replace the NaN values
         """
+        print('Treat artist mbid')
         # Append already extracted data since some artists might still have a 'null' artist_mbid
         df_existing_lastfm_data = pd.DataFrame(columns = self.config_manager.TRACK_DATA_SCHEMA.keys())
         if os.path.exists(self.config_manager.PATH_EXTRACT) and not self.config_manager.NEW_CSV:
@@ -54,14 +55,14 @@ class LastFMDataExtractor:
         # If MusicBrainz artist file exists, check if we already extracted artists info
         # else, fetch data from all artists
         df_existing_mb_artist_info = pd.DataFrame()
-        if os.path.exists(self.config_manager.MB_PATH_ARTIST_INFO) and not NEW_MB_CSV:
+        if os.path.exists(self.config_manager.MB_PATH_ARTIST_INFO) and not self.config_manager.NEW_MB_CSV:
             # df_existing_mb_artist_info = pd.read_excel(MB_PATH_ARTIST_INFO)
             df_existing_mb_artist_info = self.storage.read_excel(path=self.config_manager.MB_PATH_ARTIST_INFO, schema=self.config_manager.MB_ARTIST_SCHEMA)
             mbids_already_extracted = list(set(df_existing_mb_artist_info[df_existing_mb_artist_info['artist_mbid'].notna()]['artist_mbid']))
             
             artists_to_extract = [mbid for mbid in list_artist_mbid if (mbid and mbid not in mbids_already_extracted)]
         else:
-            NEW_MB_CSV = True
+            self.config_manager.NEW_MB_CSV = True
             artists_to_extract = [mbid for mbid in list_artist_mbid if mbid]
         
         mb_artist_data = self.musicbrainz_api.fetch_artist_info_from_musicbrainz(artists_to_extract)
@@ -80,6 +81,7 @@ class LastFMDataExtractor:
 
     def run(self):
         # Fetch track data with duration
+        print('Fetching Lastfm data')
         lastfm_data = self.lastfm_api.extract_track_data()
 
         # Create DataFrame with lastfm data
@@ -122,6 +124,7 @@ class LastFMDataExtractor:
             helper_df_artist.drop(columns='_merge', inplace=True)
 
             # Create second helper table with album & artist info
+            print('Create helper table - album & artist info')
             album_info_list = []
             for _, row in helper_df_album_artist.iterrows():
                 artist_name = row['artist_name']
@@ -158,11 +161,12 @@ class LastFMDataExtractor:
         df_user = pd.DataFrame(user_data)
         self.storage.output_excel(df=df_user, path=self.config_manager.PATH_USER_INFO)
 
-        df_output = self.treatment_artist_mbid(lastfm_data)
+        df_output = self.treatment_artist_mbid(df_lastfm)
 
         self.helper.replace_nan(df=df_output, schema=self.config_manager.TRACK_DATA_SCHEMA)
 
         # Output the CSV with track data
+        print('Save final output')
         self.storage.output_excel(df=df_output, path=self.config_manager.PATH_EXTRACT, schema=self.config_manager.TRACK_DATA_SCHEMA)
 
 if __name__ == "__main__":

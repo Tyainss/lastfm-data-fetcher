@@ -14,16 +14,19 @@ class ConfigManager:
         self.NEW_CSV = self.config["NEW_LASTFM_CSV"]
         self.NEW_MB_CSV = self.config["NEW_MUSICBRAINZ_CSV"]
 
-        if self.NEW_CSV:
+        self.USERNAME = self.config['USER_TO_EXTRACT']
+        if self.USERNAME not in self.config['USER_EXTRACT_INFO']:
+            self.add_user(self.USERNAME)
+        elif self.NEW_CSV:
             self.reset_config()
 
+        self.LATEST_TRACK_DATE = self.config['USER_EXTRACT_INFO'][self.USERNAME]['latest_track_date']
+        self.SCROBBLE_NUMBER = self.config['USER_EXTRACT_INFO'][self.USERNAME]['scrobble_number']
+
         self.API_KEY = self.config['API_KEY']
-        self.USERNAME = self.config['USERNAME']
         self.BASE_URL = 'http://ws.audioscrobbler.com/2.0/'
         self.PATH_EXTRACT = self.config['path_extracted_file'].replace('{username}', self.USERNAME)
         self.PATH_USER_INFO = self.config['path_user_info_file'].replace('{username}', self.USERNAME)
-        self.LATEST_TRACK_DATE = self.config['latest_track_date']
-        self.SCROBBLE_NUMBER = self.config['scrobble_number']
         self.EXTRACT_FOLDER = self.config['extract_folder']
         self.PATH_HELPER_ALBUM_INFO = self.config['path_helper_album_artist']
         self.PATH_HELPER_ARTIST_INFO = self.config['path_helper_artist']
@@ -52,10 +55,18 @@ class ConfigManager:
             print(f"Error: The file {path} is not a valid JSON.")
             return {}
 
+    def add_user(self, username):
+        self.config['USER_EXTRACT_INFO'][username] = {
+            'latest_track_date': "",
+            'scrobble_number': 0
+        }
+        
+        self.save_json(self.config_path, self.config)
+
     def reset_config(self):
         if self.config["NEW_LASTFM_CSV"]:
-            self.config['latest_track_date'] = ""
-            self.config['scrobble_number'] = 0
+            self.config['USER_EXTRACT_INFO'][self.USERNAME]['latest_track_date'] = ""
+            self.config['USER_EXTRACT_INFO'][self.USERNAME]['scrobble_number'] = 0
             self.save_json(self.config_path, self.config)
 
     def save_json(self, path, data):
@@ -67,7 +78,7 @@ class ConfigManager:
             print(f"Error: Could not save the configuration to {path}. {str(e)}")
 
     def update_latest_track_date(self, date, track_number):
-        self.config['latest_track_date'] = date
-        self.config['scrobble_number'] = track_number
+        self.config['USER_EXTRACT_INFO'][self.USERNAME]['latest_track_date'] = date
+        self.config['USER_EXTRACT_INFO'][self.USERNAME]['scrobble_number'] = track_number
         self.save_json(self.config_path, self.config)
 
