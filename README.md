@@ -11,9 +11,6 @@ Extract your Lastfm data and then use it to find insights on your listening hist
 - Merge and clean data to prepare for analysis.
 - Output data in Excel format for easy use in [Tableau](https://public.tableau.com/app/discover).
 
-## Index
-- 
--
 
 ## What is Lastfm?
 Last.fm is a music streaming service that **tracks your listening habits** across various platforms. So that means you get detailed information on all your listening history since the moment you connect your streaming service of preference (e.g. Spotify) to your Lastfm account.
@@ -79,7 +76,7 @@ Unfortunately, Tableau Public does not allow to share a file with the Tableau Da
 
     ![Initial Data Source Page](images/03_Initial_DS_Page.png)
 
-5. Download the [dates_2010_2030.xslx](extract_folder/dates_2010_2030.xlsx) Excel File. You'll need it to scaffold the data with dates from days you have no listening history.
+5. Download the [dates_2010_2030.xslx](extract_folder/dates_2010_2030.xlsx) Excel File. You'll need it to fill the data with dates from days you have no listening history.
 6. Click on 'Add' in Connections > Microsoft Excel > dates_2010_2030.xlsx
 
     ![Add Connection](images/04_Add_Connection.png)
@@ -125,3 +122,20 @@ Unfortunately the replacement of the data source makes so that some default feat
 
 If you intend to refresh the data in the future, that's easier and quicker!
 Simply rerun the script, which will bring the missing scrobbles. After that, go into your dashboard, right click your data source, followed by *Refresh*.
+
+#### Creating the data source for the Radial Column Chart:
+
+One of the graphs on the User Dashboard view requires a scaffolding technique to duplicate each row of the original datasource so that the graph can be created. 
+In order to also update that graph, you'll need to also create a replacement for its data source. Here's how you do it:
+
+1. Follow previously mentioned steps 1 to 4
+2. Download the [radial_chart_scaffold.xslx](extract_folder/radial_chart_scaffold.xlsx) Excel File
+3. Click on 'Add' in Connections > Microsoft Excel > radial_chart_scaffold.xlsx
+4. Double Click "Sheet 1" (or Right-Click & press *Open...*), then click on *radial_chart_scaffold* and drag the `Sheet1` underneath "Sheets" to the canvas:
+5. Select Full Outer Join as the Join. You need to create a Join Calculation on both conditions but now with the join condition only containing a `1`
+
+    ![Radial Chart Join Condition](images/12_Radial_Chart_Join_Condition.png)
+
+    This will make it so that each row of the original data set is multiplied by the number of rows of the radial_chart_scaffold file (which is 2 rows)
+
+6. Now replace the *Radial Column Chart* data source by this new version containing your data and you're good to go!
