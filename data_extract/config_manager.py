@@ -11,13 +11,13 @@ class ConfigManager:
         self.schema = self.load_json(schema_path)
 
         self.GET_EXTRA_INFO = self.config['GET_EXTRA_INFO']
-        self.NEW_CSV = self.config["NEW_LASTFM_CSV"]
-        self.NEW_MB_CSV = self.config["NEW_MUSICBRAINZ_CSV"]
+        self.NEW_XLSX = self.config["NEW_LASTFM_XLSX"]
+        self.NEW_MB_XLSX = self.config["NEW_MUSICBRAINZ_XLSX"]
 
         self.USERNAME = self.config['USER_TO_EXTRACT']
         if self.USERNAME not in self.config['USER_EXTRACT_INFO']:
             self.add_user(self.USERNAME)
-        elif self.NEW_CSV:
+        elif self.NEW_XLSX:
             self.reset_config()
 
         self.LATEST_TRACK_DATE = self.config['USER_EXTRACT_INFO'][self.USERNAME]['latest_track_date']
@@ -31,8 +31,6 @@ class ConfigManager:
         self.PATH_HELPER_ALBUM_INFO = self.config['path_helper_album_artist']
         self.PATH_HELPER_ARTIST_INFO = self.config['path_helper_artist']
         self.MB_PATH_ARTIST_INFO = self.config['path_musicbrainz_artist_info']
-        self.MB_CLIENT_ID = self.config['MusicBrainz_Client_ID']
-        self.MB_CLIENT_SECRET = self.config['MusicBrainz_Client_Secret']
 
         self.TRACK_DATA_SCHEMA = self.schema['Scrobble Data']
         self.MB_ARTIST_SCHEMA = self.schema['MusicBrainz Data']

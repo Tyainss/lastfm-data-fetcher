@@ -37,7 +37,7 @@ class LastFMDataExtractor:
         print('Treat artist mbid')
         # Append already extracted data since some artists might still have a 'null' artist_mbid
         df_existing_lastfm_data = pd.DataFrame(columns = self.config_manager.TRACK_DATA_SCHEMA.keys())
-        if os.path.exists(self.config_manager.PATH_EXTRACT) and not self.config_manager.NEW_CSV:
+        if os.path.exists(self.config_manager.PATH_EXTRACT) and not self.config_manager.NEW_XLSX:
             df_existing_lastfm_data = self.storage.read_excel(path=self.config_manager.PATH_EXTRACT, schema=self.config_manager.TRACK_DATA_SCHEMA)
 
         # Append new data to bottom of existing csv
@@ -55,14 +55,14 @@ class LastFMDataExtractor:
         # If MusicBrainz artist file exists, check if we already extracted artists info
         # else, fetch data from all artists
         df_existing_mb_artist_info = pd.DataFrame()
-        if os.path.exists(self.config_manager.MB_PATH_ARTIST_INFO) and not self.config_manager.NEW_MB_CSV:
+        if os.path.exists(self.config_manager.MB_PATH_ARTIST_INFO) and not self.config_manager.NEW_MB_XLSX:
             # df_existing_mb_artist_info = pd.read_excel(MB_PATH_ARTIST_INFO)
             df_existing_mb_artist_info = self.storage.read_excel(path=self.config_manager.MB_PATH_ARTIST_INFO, schema=self.config_manager.MB_ARTIST_SCHEMA)
             mbids_already_extracted = list(set(df_existing_mb_artist_info[df_existing_mb_artist_info['artist_mbid'].notna()]['artist_mbid']))
             
             artists_to_extract = [mbid for mbid in list_artist_mbid if (mbid and mbid not in mbids_already_extracted)]
         else:
-            self.config_manager.NEW_MB_CSV = True
+            self.config_manager.NEW_MB_XLSX = True
             artists_to_extract = [mbid for mbid in list_artist_mbid if mbid]
         
         mb_artist_data = self.musicbrainz_api.fetch_artist_info_from_musicbrainz(artists_to_extract)
