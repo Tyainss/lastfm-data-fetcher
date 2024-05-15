@@ -33,7 +33,7 @@ To set up this project locally, follow these steps:
    ```
    cd lastfm-data-fetcher
    ```
-3. Update the `config example.json` file with your Lastfm Username and your Lastfm API Key (more info on that [here](getting_started/with_Lastfm/get_Lastfm_API_key.md)):
+3. Update the `config example.json` file with your Lastfm Username and your Lastfm API Key (more info on that [here](getting_started/with_Lastfm/get_Lastfm_API_key.md)), as well as changing that file name to `config.json`:
    ```
    "USER_TO_EXTRACT": "YOUR_USER",
     "API_KEY": "YOUR_API_KEY"
