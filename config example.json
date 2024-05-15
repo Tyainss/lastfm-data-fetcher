@@ -1,12 +1,12 @@
 {
     "USER_EXTRACT_INFO": {
     },
-    "USER_TO_EXTRACT": "YOUR_USER",
+    "USER_TO_EXTRACT": "YOUR_LASTFM_USERNAME",
     "API_KEY": "YOUR_API_KEY",
     "BASE_URL": "http://ws.audioscrobbler.com/2.0/",
     "GET_EXTRA_INFO": true,
-    "NEW_LASTFM_CSV": false,
-    "NEW_MUSICBRAINZ_CSV": false,
+    "NEW_LASTFM_XLSX": false,
+    "NEW_MUSICBRAINZ_XLSX": false,
     "extract_folder": ".\\extract_folder",
     "path_extracted_file": ".\\extract_folder\\lastfm_extract_{username}.xlsx",
     "path_musicbrainz_artist_info": ".\\extract_folder\\musicbrainz_artist_info.xlsx",

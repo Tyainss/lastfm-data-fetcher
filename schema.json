@@ -22,13 +22,12 @@
         "artist_listeners": "int64",
         "artist_playcount": "int64"
     },
-
     "MusicBrainz Data": {
         "artist_country": "str",
         "artist_type": "str",
         "artist_main_genre": "str",
-        "artist_career_begin": "datetime64",
-        "artist_career_end": "datetime64",
+        "artist_career_begin": "datetime64[ns]",
+        "artist_career_end": "datetime64[ns]",
         "artist_career_ended": "boolean"
     }
 }
